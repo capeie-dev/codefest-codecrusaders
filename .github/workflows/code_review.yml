@@ -1,5 +1,4 @@
 name: Code Review Bot
-
 on:
   pull_request:
     types: [opened, synchronize]
@@ -21,13 +20,27 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Create virtualenv
+        run: python -m venv .venv
+
+      - name: Restore venv cache
+        id: venv-cache
+        uses: actions/cache@v3
+        with:
+          path: ./.venv
+          key: ${{ runner.os }}-venv-${{ hashFiles('.github/scripts/**.py') }}
+
       - name: Install dependencies
+        if: steps.venv-cache.outputs.cache-hit != 'true'
         run: |
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install openai requests
 
       - name: Run Code Review
+        run: |
+          source .venv/bin/activate
+          python .github/scripts/code_review.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: python .github/scripts/code_review.py
