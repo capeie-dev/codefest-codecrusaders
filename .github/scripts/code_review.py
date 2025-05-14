@@ -16,12 +16,30 @@ def get_pr_diff(pr_number):
     return response.text
 
 def analyze_code_changes(diff_text):
-    """Analyze code changes using OpenAI API"""
+    """Analyze code changes using OpenAI API, excluding .github folder changes"""
+    # Filter out changes from .github folder
+    filtered_diff_lines = []
+    current_file = None
+    skip_current = False
+    
+    for line in diff_text.split('\n'):
+        if line.startswith('diff --git'):
+            current_file = line.split()[2][2:]  # Get the b/ filename
+            skip_current = current_file.startswith('.github/')
+        if not skip_current:
+            filtered_diff_lines.append(line)
+    
+    filtered_diff = '\n'.join(filtered_diff_lines)
+    
+    # If there are no changes after filtering, return a message
+    if not filtered_diff.strip():
+        return "No changes found outside of the .github folder."
+    
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
     prompt = f"""Analyze the following code changes and provide a 5-point summary of the key modifications:
     
-    {diff_text}
+    {filtered_diff}
     
     Please format your response as a bulleted list with 5 key points."""
 
