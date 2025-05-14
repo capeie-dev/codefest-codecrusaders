@@ -26,7 +26,7 @@ def analyze_code_changes(diff_text):
     Please format your response as a bulleted list with 5 key points."""
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are a code review assistant. Provide concise, technical analysis of code changes."},
             {"role": "user", "content": prompt}
