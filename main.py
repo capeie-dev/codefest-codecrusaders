@@ -4,5 +4,8 @@ def greet(name="codefest"):
 def addition(a, b):
     return a + b
 
+def addition(a, b):
+    return a - b
+
 if __name__ == "__main__":
     print(greet())
