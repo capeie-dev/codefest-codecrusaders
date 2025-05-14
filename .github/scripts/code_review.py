@@ -16,14 +16,42 @@ def get_pr_diff(pr_number):
     return response.text
 
 def analyze_code_changes(diff_text):
-    """Analyze code changes using OpenAI API"""
+    """Analyze code changes using OpenAI API, excluding .github folder changes"""
+    # Filter out changes from .github folder
+    filtered_diff_lines = []
+    current_file = None
+    skip_current = False
+    changed_files = set()
+    changed_lines = 0
+    
+    for line in diff_text.split('\n'):
+        if line.startswith('diff --git'):
+            current_file = line.split()[2][2:]  # Get the b/ filename
+            skip_current = current_file.startswith('.github/')
+            if not skip_current:
+                changed_files.add(current_file)
+        elif not skip_current and (line.startswith('+') or line.startswith('-')):
+            changed_lines += 1
+        if not skip_current:
+            filtered_diff_lines.append(line)
+    
+    filtered_diff = '\n'.join(filtered_diff_lines)
+    
+    # If there are no changes after filtering, return a message
+    if not filtered_diff.strip():
+        return "No changes found outside of the .github folder."
+    
+    # Determine number of points based on changes
+    num_points = min(max(2, len(changed_files) + changed_lines // 10), 8)
+    
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    prompt = f"""Analyze the following code changes and provide a 5-point summary of the key modifications:
+    prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
+    The number of points has been automatically determined based on the scope of changes.
     
-    {diff_text}
+    {filtered_diff}
     
-    Please format your response as a bulleted list with 5 key points."""
+    Please format your response as a bulleted list with exactly {num_points} key points."""
 
     response = client.chat.completions.create(
         model="gpt-4o",
