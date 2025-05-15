@@ -49,10 +49,16 @@ def analyze_code_changes(diff_text):
     prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
     The number of points has been automatically determined based on the scope of changes.
     
+    In addition to summarizing the changes, please also highlight:
+    - Any missing or insufficient documentation (e.g., missing JavaDocs, unclear naming)
+    - Missing null checks or potential null-related issues
+    - Opportunities for code optimization (e.g., redundant logic, inefficient structure)
+    - Violations of best coding practices (naming conventions, formatting, separation of concerns)
+    
     {filtered_diff}
     
     Please format your response as a bulleted list with exactly {num_points} key points."""
-
+    
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
