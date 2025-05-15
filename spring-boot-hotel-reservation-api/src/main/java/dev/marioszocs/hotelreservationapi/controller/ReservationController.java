@@ -12,62 +12,63 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Reservation Controller containing endpoints of Reservation related API calls
+ * Reservation Controller containing endpoints for Reservation-related API calls.
  */
 @Slf4j
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1")
 public class ReservationController {
+
     private final ReservationService reservationService;
 
     /**
-     * End point to get all reservations.
+     * Retrieves the list of all reservations.
      *
-     * @return list of Reservations
+     * @return a list of {@link Reservation} objects
      */
     @GetMapping(value = "/reservations", produces = "application/json")
-    public List<Reservation> getReservationList(){
-        log.info("Get all reservations...");
+    public List<Reservation> getReservationList() {
+        log.info("Fetching all reservations");
         return reservationService.getAllReservations();
-    }
-    //jUnit, integrationtest, mockito, hibernate, lombok, jpa, swagger
-    /**
-     * End point to get user specified reservation.
-     *
-     * @param id Integer
-     * @return Reservation object
-     */
-    @GetMapping(value = "/reservation/{id}", produces = "application/json")
-    public Reservation getReservation(@PathVariable Integer id){
-        ReservationValidator.validateId(id);
-        log.info("Get a user specified reservation with id = {}", id);
-        return reservationService.getReservation(id);
     }
 
     /**
-     * End point to update user specified Reservation
+     * Retrieves a specific reservation by its ID.
      *
-     * @param reservation
-     * @return
+     * @param reservationId the ID of the reservation to retrieve
+     * @return the {@link Reservation} object
+     */
+    @GetMapping(value = "/reservation/{id}", produces = "application/json")
+    public Reservation getReservation(@PathVariable("id") Integer reservationId) {
+        ReservationValidator.validateId(reservationId);
+        log.info("Fetching reservation with ID: {}", reservationId);
+        return reservationService.getReservation(reservationId);
+    }
+
+    /**
+     * Saves a new reservation or updates an existing one.
+     *
+     * @param reservation the {@link Reservation} object to save
+     * @return an {@link IdEntity} containing the ID of the saved reservation
      */
     @PostMapping(value = "/reservation", produces = "application/json")
-    public IdEntity saveReservation(@RequestBody Reservation reservation){
+    public IdEntity saveReservation(@RequestBody Reservation reservation) {
         ReservationValidator.validateReservationPOST(reservation);
-        log.info("Save a user specified reservation...");
+        log.info("Saving reservation: {}", reservation);
         return reservationService.saveReservation(reservation);
     }
 
     /**
-     * End point to delete user specified Reservation.
+     * Deletes the reservation identified by the given ID.
      *
-     * @param id Integer
-     * @return successEntity
+     * @param reservationId the ID of the reservation to delete
+     * @return a {@link SuccessEntity} indicating the result of the deletion
      */
     @DeleteMapping(value = "/reservation/{id}", produces = "application/json")
-    public SuccessEntity deleteReservation(@PathVariable Integer id){
-        ReservationValidator.validateId(id);
-        log.info("Delete a user specified reservation...");
-        return reservationService.deleteReservation(id);
+    public SuccessEntity deleteReservation(@PathVariable("id") Integer reservationId) {
+        ReservationValidator.validateId(reservationId);
+        log.info("Deleting reservation with ID: {}", reservationId);
+        return reservationService.deleteReservation(reservationId);
     }
 }
