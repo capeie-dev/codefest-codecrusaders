@@ -7,11 +7,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.time.LocalDate;
 
-/**
- * Entity for holding reservation data - CONFLICT VERSION.
- */
+
 @Getter
 @Setter
 @Entity
@@ -21,32 +18,21 @@ import java.time.LocalDate;
 @Table(name = "reservation")
 public class Reservation extends AuditableEntity {
 
-    /**
-     * Hotel identifier — renamed and changed type to conflict.
-     */
     @Column(name = "hotel_id", nullable = false)
-    private Long hotelCode;
+    private Integer hotelId;
 
-    /**
-     * New format: use LocalDate instead of String — conflict with test branch.
-     */
     @Column(name = "check_in", nullable = false)
-    private LocalDate checkIn;
+    private String checkIn;
 
     @Column(name = "check_out", nullable = false)
-    private LocalDate checkOut;
+    private String checkOut;
 
-    /**
-     * Max guests changed from 8 → 10 and renamed — another conflict.
-     */
     @Min(1)
-    @Max(10)
+    @Max(8)
     @Column(nullable = false)
-    private Integer guestCount;
+    private Integer guests;
 
-    /**
-     * Field renamed from 'status' to 'confirmed' — conflict.
-     */
     @Column
-    private boolean confirmed;
+    private boolean status;
+
 }
