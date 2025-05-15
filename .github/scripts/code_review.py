@@ -49,35 +49,19 @@ def analyze_code_changes(diff_text):
     prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
     The number of points has been automatically determined based on the scope of changes.
     
-    In addition to summarizing the changes, please also watch for:
-    - Missing or insufficient documentation (e.g., missing JavaDocs, unclear naming)
-    - Missing null checks or potential null-related issues
-    - Code optimization opportunities (e.g., redundant logic, inefficient structure)
-    - Violations of best coding practices (naming, formatting, code structure)
-    
     {filtered_diff}
     
     Please format your response as a bulleted list with exactly {num_points} key points."""
-    
+
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a code review assistant. Provide concise, technical analysis of code changes. "
-                    "In addition to summarizing what changed, evaluate for missing documentation, potential null issues, "
-                    "optimization opportunities, and adherence to best practices."
-                )
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
+            {"role": "system", "content": "You are a code review assistant. Provide concise, technical analysis of code changes."},
+            {"role": "user", "content": prompt}
         ]
     )
-
-return response.choices[0].message.content
+    
+    return response.choices[0].message.content
 
 
 def post_pr_comment(pr_number, comment):
