@@ -23,54 +23,45 @@ def analyze_code_changes(diff_text):
     skip_current = False
     changed_files = set()
     changed_lines = 0
-
+    
     for line in diff_text.split('\n'):
         if line.startswith('diff --git'):
-            # Get the 'b/...' filename
-            current_file = line.split()[2][2:]
+            current_file = line.split()[2][2:]  # Get the b/ filename
             skip_current = current_file.startswith('.github/')
             if not skip_current:
                 changed_files.add(current_file)
         elif not skip_current and (line.startswith('+') or line.startswith('-')):
             changed_lines += 1
-
         if not skip_current:
             filtered_diff_lines.append(line)
-
+    
     filtered_diff = '\n'.join(filtered_diff_lines)
-
+    
     # If there are no changes after filtering, return a message
     if not filtered_diff.strip():
         return "No changes found outside of the .github folder."
-
+    
     # Determine number of points based on changes
     num_points = min(max(2, len(changed_files) + changed_lines // 10), 8)
-
-    # 1) Strict system message enforcing tags, per-file split, and recommendation sections
-    system_msg = (
-        "You are a code review assistant. You must:\n"
-        "1) Split the combined diff into per-file sections using lines starting with "
-        "'diff --git a/...<FileName>.java'.\n"
-        f"2) Under each file heading, list exactly {num_points} findings.\n"
-        "3) Every finding MUST start with one of these tags in [ ]: "
-        "[DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE].\n"
-        "   Format each as: - [TAG] Short title: concise description.\n"
-        "4) Then include TWO sections:\n"
-        "   a) Recommendations for Code Optimization (write 'None' if none).\n"
-        "   b) Recommendations for Best Practices (write 'None' if none).\n"
-    )
-
-    # 2) User prompt with the fenced diff
-    prompt = f"""
-    Here is the combined diff for multiple files. Use it to isolate each file’s changes:
     
-    ```diff
+    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+    
+    prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
+    The number of points has been automatically determined based on the scope of changes.
+    
     {filtered_diff}
+    
+    Please format your response as a bulleted list with exactly {num_points} key points."""
 
-    ```"""
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a code review assistant. Provide concise, technical analysis of code changes."},
+            {"role": "user", "content": prompt}
+        ]
+    )
     
     return response.choices[0].message.content
-
 
 def post_pr_comment(pr_number, comment):
     """Post a comment on the PR"""
