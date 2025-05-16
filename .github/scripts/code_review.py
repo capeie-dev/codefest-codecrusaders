@@ -46,35 +46,31 @@ def analyze_code_changes(diff_text):
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    # 1) Define your tag set up front
-    TAGS = {
-        "DOC_MISSING":    "Missing or insufficient documentation (e.g. JavaDocs, unclear naming)",
-        "NULL_ISSUE":     "Missing null checks or potential null-related issues",
-        "OPTIMIZE":       "Opportunities for code optimization (e.g. redundant logic, inefficient structure)",
-        "BEST_PRACTICE":  "Violations of naming conventions, formatting, separation of concerns"
-    }
-    
-    # 2) Build the prompt
     prompt = f"""
-    You are a code review assistant. Follow these steps:
+    You are a code review assistant. Follow these steps exactly:
     
-    1) Review the diff below and produce exactly {num_points} findings.
-       - For each finding, prepend one of these tags in square brackets:
-         {', '.join(f"[{t}]: {desc}" for t, desc in TAGS.items())}
-       - Format each as:
+    1) **Findings**  
+       - For *each file* below, list exactly {num_points} findings under its own sub-heading.  
+       - Prepend every finding with one of these tags in square brackets:  
+         [DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE]  
+       - Format each finding as:
          - [TAG] Short title: concise description.
     
-    2) After your findings, add a “Recommendations” section with two subsections:
+    2) **Recommendations for Code Optimization:**  
+       - List every opportunity to make the code more efficient, eliminate redundancy, improve algorithms, etc.  
+       - If none, write `None`
     
-       Recommendations for Code Optimization:
-       - (List any suggestions to make the code more efficient, eliminate redundancy, improve algorithms, etc.)
+    3) **Recommendations for Best Practices:**  
+       - List every suggestion for naming, formatting, separation of concerns, documentation, error handling, etc.  
+       - If none, write `None`
     
-       Recommendations for Best Practices:
-       - (List any suggestions for naming, formatting, separation of concerns, documentation improvements, etc.)
+    ---
     
-    Here’s the diff:
+    Below is the combined diff for multiple files. Use it to isolate each file’s changes:
     
+    ```diff
     {filtered_diff}
+
     """
     
     return response.choices[0].message.content
