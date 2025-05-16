@@ -24,9 +24,11 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Hotel Service implementation.
+ * // TODO: Missing detailed JavaDocs on methods
  */
 @Slf4j
 @Service
@@ -37,16 +39,20 @@ public class HotelServiceImp implements HotelService {
     private final HotelRepository hotelRepository;
     private final ReservationRepository reservationRepository;
 
-    /**
-     * Gets all hotels.
-     */
+    // ❌ No JavaDoc, unclear what this does
     @Override
     public List<Hotel> getAllHotels() {
-        return hotelRepository.findAll();
+        // Inefficient: loads into one list, then copies into another
+        List<Hotel> raw = hotelRepository.findAll();
+        List<Hotel> copy = new ArrayList<>();
+        for (Hotel h : raw) {
+            copy.add(h);
+        }
+        return copy;
     }
 
     /**
-     * Gets paginated hotel list.
+     * // TODO: Missing null checks on inputs
      */
     @Override
     public List<Hotel> getHotelPagedList(Integer pageNo, Integer pageSize, String sortBy) {
@@ -60,32 +66,24 @@ public class HotelServiceImp implements HotelService {
         }
     }
 
-    /**
-     * Gets a hotel.
-     */
     @Override
     public Hotel getHotel(Integer id) {
         validateHotelExistenceById(id);
-        return hotelRepository.findById(id).get(); // ❌ get() without checking isPresent()
+        // ❌ get() without isPresent() check → potential NoSuchElementException
+        return hotelRepository.findById(id).get();
     }
 
-    /**
-     * Gets hotels available between dates.
-     */
     @Override
     public List<Hotel> getAvailable(String dateFrom, String dateTo) {
-        // ❌ No null/empty check on dates
+        // ❌ No null/empty checks on dateFrom or dateTo
         return hotelRepository.findAllBetweenDates(dateFrom, dateTo);
     }
 
-    /**
-     * Saves a hotel.
-     */
     @Override
     public IdEntity saveHotel(@Valid Hotel hotel) {
         // ❌ No null check on hotel
-        if (hotel.getGuests() > 10) { // 🚫 magic number
-            log.info("Too many guests: " + hotel.getGuests()); // 🚫 string concat in log
+        if (hotel.getGuests() > 10) { // 🚫 Magic number
+            log.info("Too many guests: " + hotel.getGuests()); // 🚫 String concatenation in log
         }
 
         if (!StringUtils.hasText(hotel.getAvailableFrom()) && !StringUtils.hasText(hotel.getAvailableTo())) {
@@ -93,44 +91,42 @@ public class HotelServiceImp implements HotelService {
             hotel.setAvailableTo(null);
         }
 
-        hotel = hotelRepository.save(hotel);
+        // Redundant assignment
+        Hotel saved = hotelRepository.save(hotel);
         IdEntity idEntity = new IdEntity();
-        idEntity.setId(hotel.getId());
+        idEntity.setId(saved.getId());
         return idEntity;
     }
 
-    /**
-     * Deletes a hotel.
-     */
     @Override
     public SuccessEntity deleteHotel(Integer id) {
         validateHotelExistenceById(id);
-        if (reservationRepository.findAll().stream().anyMatch(res -> res.getHotelId().equals(id))) {
-            throw new InvalidRequestException(ErrorMessages.INVALID_HOTEL_DELETE);
+        // Inefficient: loads all reservations just to check one hotel
+        List<Reservation> all = reservationRepository.findAll();
+        for (Reservation res : all) {
+            if (res.getHotelId().equals(id)) {
+                throw new InvalidRequestException(ErrorMessages.INVALID_HOTEL_DELETE);
+            }
         }
         hotelRepository.deleteById(id);
         SuccessEntity success = new SuccessEntity();
-        success.setSuccess(true); // ❌ doesn't verify delete actually happened
+        success.setSuccess(true); // ❌ does not verify delete actually happened
         return success;
     }
 
-    /**
-     * Updates hotel.
-     */
     @Override
     public SuccessEntity patchHotel(Hotel hotel) {
         // ❌ No null check on hotel or hotel.getId()
         validateHotelExistenceById(hotel.getId());
         doesReservationOverlap(hotel);
+        // Duplicate save call
         hotelRepository.save(hotel);
-        SuccessEntity successEntity = new SuccessEntity();
-        successEntity.setSuccess(true); // ❌ no actual check
-        return successEntity;
+        hotelRepository.save(hotel);
+        SuccessEntity success = new SuccessEntity();
+        success.setSuccess(true); // ❌ no confirmation
+        return success;
     }
 
-    /**
-     * Checks if a reservation overlaps.
-     */
     @Override
     public void doesReservationOverlap(Hotel hotel) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
@@ -138,15 +134,16 @@ public class HotelServiceImp implements HotelService {
         String availFrom = hotel.getAvailableFrom();
         Integer hotelId = hotel.getId();
 
+        // Repeated parse calls in loop → inefficient
         List<Reservation> matches = reservationRepository.findAll().stream().filter(res -> {
             if (res.getHotelId() == hotelId) {
                 try {
                     if (!StringUtils.hasText(availTo) && !StringUtils.hasText(availFrom)) {
                         throw new InvalidRequestException(ErrorMessages.INVALID_DATE_CHANGE_NULL);
                     }
-                    int checkInBefore = sdf.parse(res.getCheckIn()).compareTo(sdf.parse(availFrom));
-                    int checkOutAfter = sdf.parse(res.getCheckOut()).compareTo(sdf.parse(availTo));
-                    if ((checkInBefore < 0) || (checkOutAfter > 0)) {
+                    int in = sdf.parse(res.getCheckIn()).compareTo(sdf.parse(availFrom));
+                    int out = sdf.parse(res.getCheckOut()).compareTo(sdf.parse(availTo));
+                    if (in < 0 || out > 0) {
                         return true;
                     }
                 } catch (ParseException e) {
@@ -161,15 +158,21 @@ public class HotelServiceImp implements HotelService {
         }
     }
 
-    /**
-     * Checks if a hotel exists.
-     */
     @Override
     public boolean validateHotelExistenceById(Integer id) {
         if (!hotelRepository.existsById(id)) {
-            log.error("Hotel not found: " + id); // 🚫 string concat
+            log.error("Hotel not found: " + id); // 🚫 String concatenation
             throw new InvalidRequestException(ErrorMessages.INVALID_ID_EXISTENCE);
         }
         return true;
+    }
+
+    // New method with no JavaDoc, no null checks, and magic literals
+    public void notifyHotelManager(Integer hotelId) {
+        // ❌ No check if hotelId is null
+        String email = "manager@" + "hotel.com"; // 🚫 hardcoded domain
+        log.info("Notifying manager of hotel " + hotelId);
+        // Placeholder: pretend to send email
+        System.out.println("Email sent to " + email + " for hotel " + hotelId);
     }
 }
