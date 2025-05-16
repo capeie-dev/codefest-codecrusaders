@@ -22,17 +22,22 @@ def analyze_code_changes(diff_text):
     current_file = None
     skip_current = False
     changed_files = set()
-    changed_lines = 0
+    added_lines = 0
+    removed_lines = 0
+
     
     for line in diff_text.split('\n'):
         if line.startswith('diff --git'):
-            current_file = line.split()[2][2:]  # Get the b/ filename
+            current_file = line.split()[2][2:]  # Get "b/filename"
             skip_current = current_file.startswith('.github/')
             if not skip_current:
-                changed_files.add(current_file)
-        elif not skip_current and (line.startswith('+') or line.startswith('-')):
-            changed_lines += 1
-        if not skip_current:
+                file_name_only = os.path.basename(current_file)
+                changed_files.add(file_name_only)
+        elif not skip_current:
+            if line.startswith('+') and not line.startswith('+++'):
+                added_lines += 1
+            elif line.startswith('-') and not line.startswith('---'):
+                removed_lines += 1
             filtered_diff_lines.append(line)
     
     filtered_diff = '\n'.join(filtered_diff_lines)
@@ -70,34 +75,37 @@ def analyze_code_changes(diff_text):
     </details>
     
     Repeat this for each file.
-
-    ---
-
-    ### 📊 Summary of Changes
-    
-    - Files changed: Count and list of filenames  
-    - Total lines added / removed  
-    - Common change types: e.g., logging updates, null checks, JavaDocs, validations  
-    - Impact area: e.g., Controller layer, API surface
     
     ---
     
-    ### 🧾 Summary of Findings
+    <details>
+    <summary>📊 Summary of Changes</summary>
     
-    **✅ Files Reviewed**: List file names  
-    **❌ Null Issues**: FileName + 1-line summary  
-    **❌ Missing Docs**: FileName + issue summary  
-    **❌ Code Quality**: FileName + issue summary  
-    **💡 Suggestions**: High-level improvements across the codebase
+    - Files changed: {', '.join(sorted(changed_files)) or "None"}
+    - Total lines added / removed: +{added_lines} / -{removed_lines}
+    - Common changes may include: logging, validation, method structure, or documentation edits (adjust based on the analysis)
+    - Impact area: Describe based on file types (e.g., Controller, Service, etc.)
     
-    ---
+    </details>
     
-    Keep it professional, clean, and do not repeat the same issues in both file and summary unless it's critical. Avoid verbosity.
+    <details>
+    <summary>🧾 Summary of Findings</summary>
+    
+    **✅ Files Reviewed**: {', '.join(sorted(changed_files)) or "None"}  
+    **❌ Null Issues**: For each file, summarize NPE-related risks  
+    **❌ Missing Docs**: Which files/methods are missing JavaDocs  
+    **❌ Code Quality**: Notable violations or risky changes  
+    **💡 Suggestions**: Final optimization tips, naming clarifications, or logic improvements
+    
+    </details>
+    
+    Keep it professional and avoid repeating issues in multiple sections unless critical.
     
     Here is the diff to review:
     
     ```diff
     {filtered_diff}
+
     ```"""
     # ✅ DEBUG: Show prompt preview in GitHub Actions logs
     print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
