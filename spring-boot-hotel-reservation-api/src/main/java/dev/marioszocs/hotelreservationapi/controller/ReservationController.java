@@ -12,60 +12,71 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Reservation Controller containing endpoints for Reservation-related API calls.
+ * Reservation Controller containing endpoints of Reservation related API calls
  */
 @Slf4j
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1")
 public class ReservationController {
-
     private final ReservationService reservationService;
 
     /**
-     * Retrieves all reservations.
+     * End point to get all reservations.
+     *
+     * @return list of Reservations
      */
     @GetMapping(value = "/reservations", produces = "application/json")
-    public List<Reservation> getReservationList() {
-        return reservationService.getAllReservations(); // ❌ No logging — inconsistent with other methods
-    }
 
+    public List<Reservation> getReservationList(){
+        log.info("Get all reservations...");
+        return reservationService.getAllReservations();
+        sample-repo
+    }
+    //jUnit, integrationtest, mockito, hibernate, lombok, jpa, swagger
     /**
-     * Retrieves a specific reservation by ID.
+     * End point to get user specified reservation.
+     *
+     * @param id Integer
+     * @return Reservation object
      */
     @GetMapping(value = "/reservation/{id}", produces = "application/json")
-    public Reservation getReservation(@PathVariable("id") Integer reservationId) {
-        // ❌ No null or range check for reservationId
-        log.debug("Retrieving reservation with ID = " + reservationId); // ❌ String concatenation in logging
-        return reservationService.getReservation(reservationId);
+
+
+    public Reservation getReservation(@PathVariable Integer id){
+        ReservationValidator.validateId(id);
+        log.info("Get a user specified reservation with id = {}", id);
+        return reservationService.getReservation(id);
+        sample-repo
     }
 
     /**
-     * Saves a reservation.
+     * End point to update user specified Reservation
+     *
+     * @param reservation
+     * @return
      */
     @PostMapping(value = "/reservation", produces = "application/json")
-    public IdEntity saveReservation(@RequestBody Reservation reservation) {
-        // ❌ Missing null check
-        if (reservation.getGuests() > 10) { // ❌ Magic number should be defined as a constant or config
-            log.warn("Guest count exceeds max: " + reservation.getGuests()); // ❌ String concat again
-        }
+
+    public IdEntity saveReservation(@RequestBody Reservation reservation){
+        ReservationValidator.validateReservationPOST(reservation);
+        log.info("Save a user specified reservation...");
+        sample-repo
         return reservationService.saveReservation(reservation);
     }
 
     /**
-     * Deletes a reservation.
+     * End point to delete user specified Reservation.
+     *
+     * @param id Integer
+     * @return successEntity
      */
     @DeleteMapping(value = "/reservation/{id}", produces = "application/json")
-    public SuccessEntity deleteReservation(@PathVariable("id") Integer reservationId) {
-        log.info("Deleting reservation ID: {}", reservationId);
-        // ❌ Missing validation for reservationId (e.g., ReservationValidator.validateId(reservationId))
-        return reservationService.deleteReservation(reservationId);
-    }
 
-    // ❌ Missing JavaDoc — breaks convention
-    @PutMapping(value = "/reservation", produces = "application/json")
-    public IdEntity updateReservation(@RequestBody Reservation reservation) {
-        // ❌ No validation, no logging, blindly reuses save method from POST
-        return reservationService.saveReservation(reservation);
+    public SuccessEntity deleteReservation(@PathVariable Integer id){
+        ReservationValidator.validateId(id);
+        log.info("Delete a user specified reservation...");
+        return reservationService.deleteReservation(id);
+        sample-repo
     }
 }
