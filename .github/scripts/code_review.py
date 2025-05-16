@@ -82,6 +82,7 @@ def analyze_code_changes(diff_text):
     
     <details>
     <summary>📊 Summary of Changes</summary>
+
     
     - Files changed: {', '.join(sorted(changed_files)) or "None"}
     - Total lines added / removed: +{added_lines} / -{removed_lines}
@@ -92,6 +93,7 @@ def analyze_code_changes(diff_text):
     
     <details>
     <summary>🧾 Summary of Findings</summary>
+
     
     **✅ Files Reviewed**: {', '.join(sorted(changed_files)) or "None"}  
     **❌ Null Issues**: For each file, summarize NPE-related risks  
