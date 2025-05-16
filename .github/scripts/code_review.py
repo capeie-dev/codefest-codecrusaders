@@ -46,13 +46,39 @@ def analyze_code_changes(diff_text):
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
-    The number of points has been automatically determined based on the scope of changes.
+    prompt = f"""You are a code review assistant.
     
+    You will receive a unified diff from a GitHub pull request that includes changes across one or more source code files. Your task is to review the diff and provide structured feedback grouped **per file** and also an **overall summary**.
+    
+    ## For each file, follow this structure:
+    <filename>
+    - Changes (null checks): describe any additions, removals, or omissions of null checks or potential null pointer issues.
+    - Changes (missing docs): highlight missing or inadequate method/class JavaDocs, especially on public methods or APIs.
+    - Changes (bad coding practice): mention poor naming, logic duplication, missing logging, misuse of status codes, or anything that violates clean coding practices.
+    - Recommendation (coding optimization): suggest ways to improve performance, clarity, or maintainability. Write “None” if nothing applies.
+    
+    ## After reviewing all files, provide the following:
+    **Overall Diff Summary**
+    - Changes (null checks): list all [NULL_ISSUE] findings with affected files
+    - Changes (missing docs): list all [DOC_MISSING] findings with affected files
+    - Changes (bad coding practice): list all [BEST_PRACTICE] findings with affected files
+    - Recommendation (coding optimization): list all [OPTIMIZE] suggestions with affected files
+    
+    ## Rules:
+    - Use bullet points inside each section.
+    - If no issues exist in a section, write: `None`.
+    - Do not speculate. Only use information available in the diff.
+    - Internally tag findings as [NULL_ISSUE], [DOC_MISSING], [BEST_PRACTICE], or [OPTIMIZE] to organize the summary accurately.
+    - Do not include the raw diff in your response.
+    
+    Here is the diff to review:
+    
+    ```diff
     {filtered_diff}
+    ```"""
+    # ✅ DEBUG: Show prompt preview in GitHub Actions logs
+    print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
     
-    Please format your response as a bulleted list with exactly {num_points} key points."""
-
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
