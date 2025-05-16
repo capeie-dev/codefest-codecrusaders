@@ -89,8 +89,6 @@ def analyze_code_changes(diff_text):
     
     Repeat this for each file.
     
-    ---
-    
     <details>
     <summary>🧾 Summary of Findings</summary>
 
