@@ -46,51 +46,47 @@ def analyze_code_changes(diff_text):
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    prompt = f"""You are a code review assistant.
+    prompt = f"""You are a code review assistant helping with GitHub pull requests.
     
-    You will receive a unified diff from a GitHub pull request that includes changes across one or more source code files. Your task is to review the diff and provide structured feedback grouped by file and also an overall summary.
+    You are provided a unified diff of code changes. Analyze the changes and provide a structured, professional review grouped by file. Focus on clarity and actionable insights.
     
-    ## For each file, output exactly this structure:
+    ### For each file, use this format:
     
-    <file name>  
-    Changes (null checks):  
-    - Bullet points describing null safety issues (if any)  
+    **<FileName>**
     
-    Changes (missing docs):  
-    - Bullet points describing missing or inadequate JavaDocs (if any)  
+    **Null Safety Issues**
+    - Briefly describe any null-related risks (if none, write “None”)
     
-    Changes (bad coding practice):  
-    - Bullet points describing issues like poor naming, missing logging, bad patterns, etc.  
+    **Documentation Gaps**
+    - List any missing or incomplete JavaDocs (e.g., missing @return)
     
-    Recommendation (coding optimization):  
-    - Bullet points suggesting how to improve performance or maintainability.  
+    **Code Quality Observations**
+    - Point out inefficient code, duplicated logic, bad naming, logging issues, or other best practice violations
     
-    Use bullet points in each section. If nothing applies, write: `None`.  
-    **Use only the file name (e.g., `HotelController.java`)**, not the full path.
+    **Suggestions for Improvement**
+    - Recommend optimizations or best practices (e.g., caching, clearer naming, simplified response construction)
     
-    Avoid repeating the same issue in both the file section and the summary unless it's high priority.
-    
-    ## After listing files, include this at the end:
-    
-    **Overall Diff Summary**  
-    Changes (null checks):  
-    - List affected files and a 1-line summary of issues  
-    
-    Changes (missing docs):  
-    - List affected files and methods missing docs  
-    
-    Changes (bad coding practice):  
-    - List affected files with one-line descriptions of problems  
-    
-    Recommendation (coding optimization):  
-    - List optimization opportunities across files  
+    ### At the end, write a brief summary in this format:
     
     ---
+    
+    ### 🧾 Summary of Findings
+    
+    **Files Reviewed**: List file names  
+    **Null Issues**: FileName + 1-line summary  
+    **Missing Docs**: FileName + issue summary  
+    **Code Quality**: FileName + issue summary  
+    **Suggestions**: High-level recommendations to improve the codebase
+    
+    ---
+    
+    Keep it concise, helpful, and easy to read. Avoid repeating the same points in both file sections and the summary unless important.
     
     Here is the diff to review:
     
     ```diff
     {filtered_diff}
+
     ```"""
     # ✅ DEBUG: Show prompt preview in GitHub Actions logs
     print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
