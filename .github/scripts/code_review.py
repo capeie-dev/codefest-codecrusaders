@@ -46,26 +46,36 @@ def analyze_code_changes(diff_text):
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
-    The number of points has been automatically determined based on the scope of changes.
+    # 1) Define your tag set up front
+    TAGS = {
+        "DOC_MISSING":    "Missing or insufficient documentation (e.g. JavaDocs, unclear naming)",
+        "NULL_ISSUE":     "Missing null checks or potential null-related issues",
+        "OPTIMIZE":       "Opportunities for code optimization (e.g. redundant logic, inefficient structure)",
+        "BEST_PRACTICE":  "Violations of naming conventions, formatting, separation of concerns"
+    }
     
-    In addition to summarizing the changes, please also highlight:
-    - Any missing or insufficient documentation (e.g., missing JavaDocs, unclear naming)
-    - Missing null checks or potential null-related issues
-    - Opportunities for code optimization (e.g., redundant logic, inefficient structure)
-    - Violations of best coding practices (naming conventions, formatting, separation of concerns)
+    # 2) Build the prompt
+    prompt = f"""
+    You are a code review assistant. Follow these steps:
+    
+    1) Review the diff below and produce exactly {num_points} findings.
+       - For each finding, prepend one of these tags in square brackets:
+         {', '.join(f"[{t}]: {desc}" for t, desc in TAGS.items())}
+       - Format each as:
+         - [TAG] Short title: concise description.
+    
+    2) After your findings, add a “Recommendations” section with two subsections:
+    
+       Recommendations for Code Optimization:
+       - (List any suggestions to make the code more efficient, eliminate redundancy, improve algorithms, etc.)
+    
+       Recommendations for Best Practices:
+       - (List any suggestions for naming, formatting, separation of concerns, documentation improvements, etc.)
+    
+    Here’s the diff:
     
     {filtered_diff}
-    
-    Please format your response as a bulleted list with exactly {num_points} key points."""
-    
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a code review assistant. Provide concise, technical analysis of code changes."},
-            {"role": "user", "content": prompt}
-        ]
-    )
+    """
     
     return response.choices[0].message.content
 
