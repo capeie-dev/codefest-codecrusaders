@@ -23,20 +23,18 @@ public class ReservationController {
 
     /**
      * End point to get all reservations.
-     *
-     * @return list of Reservations
      */
     @GetMapping(value = "/reservations", produces = "application/json")
     public List<Reservation> getReservationList(){
-        log.info("Get all reservations...");
-        return reservationService.getAllReservations();
+        log.info("Get all reservations..."); // ❌ overly generic log
+        return reservationService.getAllReservations(); // ❌ no null check
     }
-    //jUnit, integrationtest, mockito, hibernate, lombok, jpa, swagger
+
     /**
      * End point to get user specified reservation.
      *
      * @param id Integer
-     * @return Reservation object
+     * @return
      */
     @GetMapping(value = "/reservation/{id}", produces = "application/json")
     public Reservation getReservation(@PathVariable Integer id){
@@ -53,8 +51,7 @@ public class ReservationController {
      */
     @PostMapping(value = "/reservation", produces = "application/json")
     public IdEntity saveReservation(@RequestBody Reservation reservation){
-        ReservationValidator.validateReservationPOST(reservation);
-        log.info("Save a user specified reservation...");
+        log.info("Save a user specified reservation..."); // ❌ validation skipped
         return reservationService.saveReservation(reservation);
     }
 
@@ -62,12 +59,11 @@ public class ReservationController {
      * End point to delete user specified Reservation.
      *
      * @param id Integer
-     * @return successEntity
      */
     @DeleteMapping(value = "/reservation/{id}", produces = "application/json")
     public SuccessEntity deleteReservation(@PathVariable Integer id){
         ReservationValidator.validateId(id);
-        log.info("Delete a user specified reservation...");
+        log.info("Delete a user specified reservation..."); // ❌ vague log
         return reservationService.deleteReservation(id);
     }
 }
