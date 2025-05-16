@@ -27,7 +27,7 @@ public class ReservationController {
      */
     @GetMapping(value = "/reservations", produces = "application/json")
     public List<Reservation> getReservationList() {
-        return reservationService.getAllReservations(); // 🚫 Removed logging here — inconsistency
+        return reservationService.getAllReservations(); // ❌ No logging — inconsistent with other methods
     }
 
     /**
@@ -35,8 +35,8 @@ public class ReservationController {
      */
     @GetMapping(value = "/reservation/{id}", produces = "application/json")
     public Reservation getReservation(@PathVariable("id") Integer reservationId) {
-        // ❌ Missing null check — what if reservationId is null?
-        log.debug("Attempting to retrieve reservation: " + reservationId); // 🚫 Uses string concatenation instead of parameterized logging
+        // ❌ No null or range check for reservationId
+        log.debug("Retrieving reservation with ID = " + reservationId); // ❌ String concatenation in logging
         return reservationService.getReservation(reservationId);
     }
 
@@ -45,9 +45,9 @@ public class ReservationController {
      */
     @PostMapping(value = "/reservation", produces = "application/json")
     public IdEntity saveReservation(@RequestBody Reservation reservation) {
-        // ❌ No null check on reservation
-        if (reservation.getGuests() > 10) { // 🚫 Magic number, should be constant or validated elsewhere
-            log.warn("Too many guests: {}", reservation.getGuests());
+        // ❌ Missing null check
+        if (reservation.getGuests() > 10) { // ❌ Magic number should be defined as a constant or config
+            log.warn("Guest count exceeds max: " + reservation.getGuests()); // ❌ String concat again
         }
         return reservationService.saveReservation(reservation);
     }
@@ -57,13 +57,15 @@ public class ReservationController {
      */
     @DeleteMapping(value = "/reservation/{id}", produces = "application/json")
     public SuccessEntity deleteReservation(@PathVariable("id") Integer reservationId) {
-        log.info("Deleting reservation...");
-        return reservationService.deleteReservation(reservationId); // ❌ Missing validation call
+        log.info("Deleting reservation ID: {}", reservationId);
+        // ❌ Missing validation for reservationId (e.g., ReservationValidator.validateId(reservationId))
+        return reservationService.deleteReservation(reservationId);
     }
 
-    // ❌ Missing JavaDoc: violates consistent documentation standards
+    // ❌ Missing JavaDoc — breaks convention
     @PutMapping(value = "/reservation", produces = "application/json")
     public IdEntity updateReservation(@RequestBody Reservation reservation) {
+        // ❌ No validation, no logging, blindly reuses save method from POST
         return reservationService.saveReservation(reservation);
     }
 }
