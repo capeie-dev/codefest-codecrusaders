@@ -70,6 +70,15 @@ def analyze_code_changes(diff_text):
     </details>
     
     Repeat this for each file.
+
+    ---
+
+    ### 📊 Summary of Changes
+    
+    - Files changed: Count and list of filenames  
+    - Total lines added / removed  
+    - Common change types: e.g., logging updates, null checks, JavaDocs, validations  
+    - Impact area: e.g., Controller layer, API surface
     
     ---
     
