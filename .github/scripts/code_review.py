@@ -76,7 +76,9 @@ def analyze_code_changes(diff_text):
     ```diff
     {filtered_diff}
     ```"""
-
+    # ✅ DEBUG: Show prompt preview in GitHub Actions logs
+    print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
+    
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
