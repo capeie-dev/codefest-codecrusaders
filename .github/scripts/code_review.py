@@ -46,12 +46,41 @@ def analyze_code_changes(diff_text):
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
-    prompt = f"""Analyze the following code changes and provide a {num_points}-point summary of the key modifications.
-    The number of points has been automatically determined based on the scope of changes.
+    prompt = f"""You are a code review assistant.
     
+    Analyze the following code changes and provide a {num_points}-point summary of key findings.
+    
+    In your analysis, focus on:
+    - Missing or insufficient documentation (e.g., missing JavaDocs, unclear method names)
+    - Missing null checks or potential null-related issues
+    - Inefficient or redundant logic
+    - Violations of clean code principles or best practices
+    
+    After the summary, include two additional sections:
+    1. Recommendations for Code Optimization
+    2. Recommendations for Best Practices
+    
+    Use this format in your response:
+    
+    • [TAG] Short title: Brief explanation (repeat for {num_points} points)
+    
+    Then:
+    Recommendations for Code Optimization:
+    - Bullet 1
+    - Bullet 2
+    (Write "None" if no suggestions)
+    
+    Recommendations for Best Practices:
+    - Bullet 1
+    - Bullet 2
+    (Write "None" if no suggestions)
+    
+    Here is the code diff:
+    
+    ```diff
     {filtered_diff}
-    
-    Please format your response as a bulleted list with exactly {num_points} key points."""
+    ```"""
+
 
     response = client.chat.completions.create(
         model="gpt-4o",
