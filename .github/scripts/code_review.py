@@ -47,26 +47,28 @@ def analyze_code_changes(diff_text):
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
     prompt = f"""
-    You are a code review assistant. Follow these steps exactly:
+    You are a code review assistant. Follow these instructions strictly:
     
     1) **Findings**  
-       - For *each file* below, list exactly {num_points} findings under its own sub-heading.  
-       - Prepend every finding with one of these tags in square brackets:  
+       - Split the combined diff below into sections by file.  
+         Each file’s section begins with a line matching `diff --git a/...<FileName>.java`.  
+       - Under each file heading, list exactly {num_points} findings.  
+       - **Every** finding **must** begin with one of these tags in square brackets:  
          [DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE]  
        - Format each finding as:
          - [TAG] Short title: concise description.
     
     2) **Recommendations for Code Optimization:**  
-       - List every opportunity to make the code more efficient, eliminate redundancy, improve algorithms, etc.  
-       - If none, write `None`
+       - List all optimization suggestions (e.g., eliminate redundancy, improve algorithms).  
+       - If there are none, write exactly `None`.
     
     3) **Recommendations for Best Practices:**  
-       - List every suggestion for naming, formatting, separation of concerns, documentation, error handling, etc.  
-       - If none, write `None`
+       - List all best-practice suggestions (e.g., naming, formatting, documentation, error handling).  
+       - If there are none, write exactly `None`.
     
     ---
     
-    Below is the combined diff for multiple files. Use it to isolate each file’s changes:
+    Here is the combined diff for multiple files. Use it to isolate each file:
     
     ```diff
     {filtered_diff}
