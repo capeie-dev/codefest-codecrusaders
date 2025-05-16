@@ -48,28 +48,44 @@ def analyze_code_changes(diff_text):
     
     prompt = f"""You are a code review assistant.
     
-    You will receive a unified diff from a GitHub pull request that includes changes across one or more source code files. Your task is to review the diff and provide structured feedback grouped **per file** and also an **overall summary**.
+    You will receive a unified diff from a GitHub pull request that includes changes across one or more source code files. Your task is to review the diff and provide structured feedback grouped by file and also an overall summary.
     
-    ## For each file, follow this structure:
-    <filename>
-    - Changes (null checks): describe any additions, removals, or omissions of null checks or potential null pointer issues.
-    - Changes (missing docs): highlight missing or inadequate method/class JavaDocs, especially on public methods or APIs.
-    - Changes (bad coding practice): mention poor naming, logic duplication, missing logging, misuse of status codes, or anything that violates clean coding practices.
-    - Recommendation (coding optimization): suggest ways to improve performance, clarity, or maintainability. Write “None” if nothing applies.
+    ## For each file, output exactly this structure:
     
-    ## After reviewing all files, provide the following:
-    **Overall Diff Summary**
-    - Changes (null checks): list all [NULL_ISSUE] findings with affected files
-    - Changes (missing docs): list all [DOC_MISSING] findings with affected files
-    - Changes (bad coding practice): list all [BEST_PRACTICE] findings with affected files
-    - Recommendation (coding optimization): list all [OPTIMIZE] suggestions with affected files
+    <file name>  
+    Changes (null checks):  
+    - Bullet points describing null safety issues (if any)  
     
-    ## Rules:
-    - Use bullet points inside each section.
-    - If no issues exist in a section, write: `None`.
-    - Do not speculate. Only use information available in the diff.
-    - Internally tag findings as [NULL_ISSUE], [DOC_MISSING], [BEST_PRACTICE], or [OPTIMIZE] to organize the summary accurately.
-    - Do not include the raw diff in your response.
+    Changes (missing docs):  
+    - Bullet points describing missing or inadequate JavaDocs (if any)  
+    
+    Changes (bad coding practice):  
+    - Bullet points describing issues like poor naming, missing logging, bad patterns, etc.  
+    
+    Recommendation (coding optimization):  
+    - Bullet points suggesting how to improve performance or maintainability.  
+    
+    Use bullet points in each section. If nothing applies, write: `None`.  
+    **Use only the file name (e.g., `HotelController.java`)**, not the full path.
+    
+    Avoid repeating the same issue in both the file section and the summary unless it's high priority.
+    
+    ## After listing files, include this at the end:
+    
+    **Overall Diff Summary**  
+    Changes (null checks):  
+    - List affected files and a 1-line summary of issues  
+    
+    Changes (missing docs):  
+    - List affected files and methods missing docs  
+    
+    Changes (bad coding practice):  
+    - List affected files with one-line descriptions of problems  
+    
+    Recommendation (coding optimization):  
+    - List optimization opportunities across files  
+    
+    ---
     
     Here is the diff to review:
     
