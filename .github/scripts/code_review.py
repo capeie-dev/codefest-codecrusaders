@@ -59,6 +59,8 @@ def analyze_code_changes(diff_text):
     
     <details>
     <summary>📄 <FileName></summary>
+
+    <br>
     
     **❌ Null Safety Issues**
     - Describe any null-related risks (write “None” if no issues)
