@@ -47,7 +47,7 @@ def analyze_code_changes(diff_text):
         return "No changes found outside of the .github folder."
     
     # Determine number of points based on changes
-    num_points = min(max(2, len(changed_files) + changed_lines // 10), 8)
+    num_points = min(max(2, len(changed_files) + (added_lines + removed_lines) // 10), 8)
     
     client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
     
