@@ -48,29 +48,30 @@ def analyze_code_changes(diff_text):
     
     prompt = f"""You are a code review assistant.
     
-    Below is a unified diff containing changes across multiple files. For each file:
-    - Display the file name as a heading.
-    - Show the related code diff for that file.
-    - Provide concise analysis of any issues found in that file.
+    You will receive a unified diff from a GitHub pull request that includes changes across one or more source code files. Your task is to review the diff and provide structured feedback grouped **per file** and also an **overall summary**.
     
-    You must:
-    - Highlight issues such as missing or insufficient documentation (e.g. JavaDocs), potential null pointer issues, inefficient or redundant logic, and violations of coding best practices.
-    - Provide exactly {num_points} bullet points across all files combined.
-    - Use this format for findings:
-      - [TAG] Short title: brief description
-      - Use tags: [DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE]
+    ## For each file, follow this structure:
+    <filename>
+    - Changes (null checks): describe any additions, removals, or omissions of null checks or potential null pointer issues.
+    - Changes (missing docs): highlight missing or inadequate method/class JavaDocs, especially on public methods or APIs.
+    - Changes (bad coding practice): mention poor naming, logic duplication, missing logging, misuse of status codes, or anything that violates clean coding practices.
+    - Recommendation (coding optimization): suggest ways to improve performance, clarity, or maintainability. Write “None” if nothing applies.
     
-    At the end, include these two summary sections:
+    ## After reviewing all files, provide the following:
+    **Overall Diff Summary**
+    - Changes (null checks): list all [NULL_ISSUE] findings with affected files
+    - Changes (missing docs): list all [DOC_MISSING] findings with affected files
+    - Changes (bad coding practice): list all [BEST_PRACTICE] findings with affected files
+    - Recommendation (coding optimization): list all [OPTIMIZE] suggestions with affected files
     
-    Recommendations for Code Optimization:
-    - List specific suggestions to improve performance or simplify logic.
-    - Write "None" if nothing to suggest.
+    ## Rules:
+    - Use bullet points inside each section.
+    - If no issues exist in a section, write: `None`.
+    - Do not speculate. Only use information available in the diff.
+    - Internally tag findings as [NULL_ISSUE], [DOC_MISSING], [BEST_PRACTICE], or [OPTIMIZE] to organize the summary accurately.
+    - Do not include the raw diff in your response.
     
-    Recommendations for Best Practices:
-    - List suggestions related to documentation, naming, structure, error handling, etc.
-    - Write "None" if nothing to suggest.
-    
-    Here is the diff:
+    Here is the diff to review:
     
     ```diff
     {filtered_diff}
