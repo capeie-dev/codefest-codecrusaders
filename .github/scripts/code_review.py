@@ -50,43 +50,45 @@ def analyze_code_changes(diff_text):
     
     You are provided a unified diff of code changes. Analyze the changes and provide a structured, professional review grouped by file. Focus on clarity and actionable insights.
     
-    ### For each file, use this format:
+    ### Format your output like this:
     
-    **<FileName>**
+    <details>
+    <summary>📄 <FileName></summary>
     
-    **Null Safety Issues**
-    - Briefly describe any null-related risks (if none, write “None”)
+    **❌ Null Safety Issues**
+    - Describe any null-related risks (write “None” if no issues)
     
-    **Documentation Gaps**
-    - List any missing or incomplete JavaDocs (e.g., missing @return)
+    **❌ Documentation Gaps**
+    - Mention missing or incomplete JavaDocs (e.g., @return, @param)
     
-    **Code Quality Observations**
-    - Point out inefficient code, duplicated logic, bad naming, logging issues, or other best practice violations
+    **❌ Code Quality Observations**
+    - Flag duplicated logic, bad naming, log misuse, poor patterns
     
-    **Suggestions for Improvement**
-    - Recommend optimizations or best practices (e.g., caching, clearer naming, simplified response construction)
+    **💡 Suggestions for Improvement**
+    - Recommend code simplifications, naming improvements, response handling fixes, or log formatting
     
-    ### At the end, write a brief summary in this format:
+    </details>
+    
+    Repeat this for each file.
     
     ---
     
     ### 🧾 Summary of Findings
     
-    **Files Reviewed**: List file names  
-    **Null Issues**: FileName + 1-line summary  
-    **Missing Docs**: FileName + issue summary  
-    **Code Quality**: FileName + issue summary  
-    **Suggestions**: High-level recommendations to improve the codebase
+    **✅ Files Reviewed**: List file names  
+    **❌ Null Issues**: FileName + 1-line summary  
+    **❌ Missing Docs**: FileName + issue summary  
+    **❌ Code Quality**: FileName + issue summary  
+    **💡 Suggestions**: High-level improvements across the codebase
     
     ---
     
-    Keep it concise, helpful, and easy to read. Avoid repeating the same points in both file sections and the summary unless important.
+    Keep it professional, clean, and do not repeat the same issues in both file and summary unless it's critical. Avoid verbosity.
     
     Here is the diff to review:
     
     ```diff
     {filtered_diff}
-
     ```"""
     # ✅ DEBUG: Show prompt preview in GitHub Actions logs
     print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
