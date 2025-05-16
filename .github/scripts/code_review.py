@@ -23,57 +23,51 @@ def analyze_code_changes(diff_text):
     skip_current = False
     changed_files = set()
     changed_lines = 0
-    
+
     for line in diff_text.split('\n'):
         if line.startswith('diff --git'):
-            current_file = line.split()[2][2:]  # Get the b/ filename
+            # Get the 'b/...' filename
+            current_file = line.split()[2][2:]
             skip_current = current_file.startswith('.github/')
             if not skip_current:
                 changed_files.add(current_file)
         elif not skip_current and (line.startswith('+') or line.startswith('-')):
             changed_lines += 1
+
         if not skip_current:
             filtered_diff_lines.append(line)
-    
+
     filtered_diff = '\n'.join(filtered_diff_lines)
-    
+
     # If there are no changes after filtering, return a message
     if not filtered_diff.strip():
         return "No changes found outside of the .github folder."
-    
+
     # Determine number of points based on changes
     num_points = min(max(2, len(changed_files) + changed_lines // 10), 8)
-    
-    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-    
+
+    # 1) Strict system message enforcing tags, per-file split, and recommendation sections
+    system_msg = (
+        "You are a code review assistant. You must:\n"
+        "1) Split the combined diff into per-file sections using lines starting with "
+        "'diff --git a/...<FileName>.java'.\n"
+        f"2) Under each file heading, list exactly {num_points} findings.\n"
+        "3) Every finding MUST start with one of these tags in [ ]: "
+        "[DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE].\n"
+        "   Format each as: - [TAG] Short title: concise description.\n"
+        "4) Then include TWO sections:\n"
+        "   a) Recommendations for Code Optimization (write 'None' if none).\n"
+        "   b) Recommendations for Best Practices (write 'None' if none).\n"
+    )
+
+    # 2) User prompt with the fenced diff
     prompt = f"""
-    You are a code review assistant. Follow these instructions strictly:
-    
-    1) **Findings**  
-       - Split the combined diff below into sections by file.  
-         Each file’s section begins with a line matching `diff --git a/...<FileName>.java`.  
-       - Under each file heading, list exactly {num_points} findings.  
-       - **Every** finding **must** begin with one of these tags in square brackets:  
-         [DOC_MISSING], [NULL_ISSUE], [OPTIMIZE], [BEST_PRACTICE]  
-       - Format each finding as:
-         - [TAG] Short title: concise description.
-    
-    2) **Recommendations for Code Optimization:**  
-       - List all optimization suggestions (e.g., eliminate redundancy, improve algorithms).  
-       - If there are none, write exactly `None`.
-    
-    3) **Recommendations for Best Practices:**  
-       - List all best-practice suggestions (e.g., naming, formatting, documentation, error handling).  
-       - If there are none, write exactly `None`.
-    
-    ---
-    
-    Here is the combined diff for multiple files. Use it to isolate each file:
+    Here is the combined diff for multiple files. Use it to isolate each file’s changes:
     
     ```diff
     {filtered_diff}
 
-    """
+    ```"""
     
     return response.choices[0].message.content
 
