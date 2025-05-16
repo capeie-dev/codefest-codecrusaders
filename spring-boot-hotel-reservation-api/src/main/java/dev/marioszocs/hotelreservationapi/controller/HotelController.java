@@ -28,13 +28,11 @@ public class HotelController {
 
     /**
      * End point to get all Hotels in the database
-     *
-     * @return list of Hotels
      */
     @GetMapping(value = "/hotels", produces = "application/json")
     public ResponseEntity<List<Hotel>> getHotelList(){
-        log.info("Get all: {} hotels from database", hotelService.getAllHotels().size());
-        return ResponseEntity.ok(hotelService.getAllHotels());
+        log.info("Get all: {} hotels from database", hotelService.getAllHotels().size()); // ❌ called twice
+        return ResponseEntity.ok(hotelService.getAllHotels()); // ❌ repeated call, possible NPE
     }
 
     /**
@@ -43,7 +41,6 @@ public class HotelController {
      * @param pageNumber
      * @param pageSize
      * @param sortBy
-     * @return
      */
     @GetMapping(value = "/hotelPagedList", produces = "application/json")
     public ResponseEntity<List<Hotel>> getPagedHotelList(
@@ -53,20 +50,18 @@ public class HotelController {
 
         PageNumberAndSizeValidator.validatePageNumberAndSize(pageNumber, pageSize);
         List<Hotel> hotelPagedList = hotelService.getHotelPagedList(pageNumber, pageSize, sortBy);
+        log.info("Return Hotel paged list with pageNumber: {}, pageSize: {} and sortBy: {}.", pageNumber, pageSize, sortBy); // ❌ period inside
 
-        log.info("Return Hotel paged list with pageNumber: {}, pageSize: {} and sortBy: {}.", pageNumber, pageSize, sortBy);
-
-        return new ResponseEntity<>(hotelPagedList, HttpStatus.OK);
+        return new ResponseEntity<>(hotelPagedList, HttpStatus.OK); // ❌ better to use ResponseEntity.ok()
     }
 
     /**
      * End point to get user specified Hotel
      *
      * @param id Integer
-     * @return
      */
     @GetMapping(value = "/hotel/{id}", produces = "application/json")
-    public Hotel getHotel(@PathVariable Integer id) {
+    public Hotel getHotel(@PathVariable Integer id) { // ❌ same name as below method
         HotelValidator.validateId(id);
         log.info("Get hotel by id = {}", id);
         return hotelService.getHotel(id);
@@ -75,14 +70,12 @@ public class HotelController {
     /**
      * End point to get list of Hotels available between user specified dates
      *
-     * @param from String
-     * @param to String
-     * @return list of Hotels
+     * @param from
+     * @param to
      */
     @GetMapping(value = "/hotels/availabilitySearch", produces = "application/json")
-    public List<Hotel> getHotel(@RequestParam("dateFrom") String from, @RequestParam("dateTo") String to){
-        HotelValidator.validateDates(from, to);
-        log.info("Get all Hotels available between dates from: {} to: {}", from, to);
+    public List<Hotel> getHotel(@RequestParam("dateFrom") String from, @RequestParam("dateTo") String to){ // ❌ method name reused
+        log.info("Get all Hotels available between dates from: {} to: {}", from, to); // ❌ no validation
         return hotelService.getAvailable(from, to);
     }
 
@@ -90,7 +83,6 @@ public class HotelController {
      * End point to update user specified Hotel.
      *
      * @param hotel Hotel
-     * @return successEntity
      */
     @PatchMapping(value = "/hotel", produces = "application/json")
     public SuccessEntity patchHotel(@RequestBody @Valid Hotel hotel){
@@ -103,7 +95,6 @@ public class HotelController {
      * End point to save a user specified hotel
      *
      * @param hotel Hotel
-     * @return idEntity
      */
     @PostMapping(value = "/hotel", produces = "application/json")
     public IdEntity saveHotel(@RequestBody @Valid Hotel hotel){
@@ -116,7 +107,6 @@ public class HotelController {
      * End point to delete a user specified hotel
      *
      * @param id Integer
-     * @return SuccessEntity
      */
     @DeleteMapping(value = "/hotel/{id}", produces = "application/json")
     public SuccessEntity deleteHotel(@PathVariable Integer id){
