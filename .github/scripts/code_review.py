@@ -56,6 +56,17 @@ def analyze_code_changes(diff_text):
     You are provided a unified diff of code changes. Analyze the changes and provide a structured, professional review grouped by file. Focus on clarity and actionable insights.
     
     ### Format your output like this:
+
+    <details>
+    <summary>📊 Summary of Changes</summary>
+
+    
+    - Files changed: {', '.join(sorted(changed_files)) or "None"}
+    - Total lines added / removed: +{added_lines} / -{removed_lines}
+    - Common changes may include: logging, validation, method structure, or documentation edits (adjust based on the analysis)
+    - Impact area: Describe based on file types (e.g., Controller, Service, etc.)
+    
+    </details>
     
     <details>
     <summary>📄 <FileName></summary>
@@ -79,17 +90,6 @@ def analyze_code_changes(diff_text):
     Repeat this for each file.
     
     ---
-    
-    <details>
-    <summary>📊 Summary of Changes</summary>
-
-    
-    - Files changed: {', '.join(sorted(changed_files)) or "None"}
-    - Total lines added / removed: +{added_lines} / -{removed_lines}
-    - Common changes may include: logging, validation, method structure, or documentation edits (adjust based on the analysis)
-    - Impact area: Describe based on file types (e.g., Controller, Service, etc.)
-    
-    </details>
     
     <details>
     <summary>🧾 Summary of Findings</summary>
