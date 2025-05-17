@@ -51,8 +51,10 @@ def analyze_code_changes(diff_text):
         total = stats['adds'] + stats['removes']
         summary_rows.append(f"| `{fname}` | {stats['adds']} | {stats['removes']} | {total} |")
     summary_table = (
-        "| File | +Adds | -Removes | ΔTotal |
+    "| File | +Adds | -Removes | ΔTotal |
 "
+    "|:----|:-----:|:--------:|:------:|
+" +
         "|:----|:-----:|:--------:|:------:|
 " +
         "
@@ -71,7 +73,8 @@ def analyze_code_changes(diff_text):
             if l.startswith('@@'):
                 snippet = lines[i:i+6]
                 break
-        snippet_text = "
+                snippet_text = "
+".join(snippet) if snippet else "*(no snippet available)*"
 ".join(snippet) if snippet else "*(no snippet available)*"
         section = f"""
 <details>
