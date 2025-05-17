@@ -61,40 +61,47 @@ The summary should be easy for a human reviewer to quickly understand the scope 
 {diff_text}
 ```
 
+### Summary of Changes
+1. **Removal or addition of scripts/files**: Describe specific files deleted or added with their paths.
+2. **Workflow modifications**: Mention exact sections or steps changed in workflow YML files.
+3. **Changes in <FileName>.java**: Under this heading, list exact code changes, such as method renames (e.g., `getAllHotels()` renamed to `fetchAllHotels()`), logging statement updates (e.g., changed `log.info` to `log.debug`), Javadoc modifications (e.g., removed `@return` tags in `getHotelList()`), added or removed parameters in methods, and any validation logic inserted or removed.
+4. **Changes in <FileName>.java**: Similarly, for each Java file, specify the precise code differences: updated method signatures, validation checks added/removed, logging message formats changed, Javadoc edits, and any structural refactorings.
+
+After this summary, include per-file sections:
+
 <details>
   <summary>📄 &lt;FileName&gt;</summary>
 
   <br>
 
   **❌ Null Safety Issues**
-  - Describe any null-related risks (write “None” if no issues)
+  - Identify any NPE risks based on removed or absent null checks.
 
   **❌ Documentation Gaps**
-  - Mention missing or incomplete JavaDocs (e.g., @return, @param)
+  - Highlight Javadoc changes, such as missing `@param` or `@return`.
 
   **❌ Code Quality Observations**
-  - Flag duplicated logic, bad naming, log misuse, poor patterns
+  - Note duplicate logic, naming issues, or pattern misuse.
 
   **💡 Suggestions for Improvement**
-  - Recommend code simplifications, naming improvements, response handling fixes, or log formatting
+  - Recommend adding null checks, improving naming, or adjusting logging levels.
 
 </details>
 
-Repeat this for each file.
+Repeat for each file.
 
 <details>
   <summary>🧾 Summary of Findings</summary>
 
   **✅ Files Reviewed**: {', '.join(sorted(changed_files)) or "None"}  
-  **❌ Null Issues**: For each file, summarize NPE-related risks  
-  **❌ Missing Docs**: Which files/methods are missing JavaDocs  
-  **❌ Code Quality**: Notable violations or risky changes  
-  **💡 Suggestions**: Final optimization tips, naming clarifications, or logic improvements
+  **❌ Null Issues**: Summarize NPE risks across files  
+  **❌ Missing Docs**: Summarize Javadoc removals or edits  
+  **❌ Code Quality**: Summarize major quality concerns  
+  **💡 Suggestions**: Overall improvement advice
 
 </details>
 
-Keep it professional and avoid repeating issues in multiple sections unless critical.
-"""
+Keep it professional and precise."""
     # ✅ DEBUG: Show prompt preview in GitHub Actions logs
     print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
     
