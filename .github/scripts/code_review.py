@@ -12,7 +12,7 @@ def get_pr_diff(pr_number):
         'Authorization': f'token {token}',
         'Accept': 'application/vnd.github.v3.diff'
     }
-    url = f'https://api.github.com/repos/{repo}/pulls/{pr_number}'
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.text
@@ -33,49 +33,44 @@ def analyze_code_changes(diff_text):
             path_b = parts[2][2:]
             current_file = path_b
             files[current_file] = {'hunks': [], 'adds': 0, 'removes': 0}
-        elif current_file is not None:
-            files[current_file].setdefault('hunks', []).append(line)
+        elif current_file:
+            files[current_file]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
                 files[current_file]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
                 files[current_file]['removes'] += 1
 
     # Filter out non-code files if desired
-    filtered_files = {f:v for f,v in files.items() if not f.startswith('.github/')}
+    filtered_files = {f: v for f, v in files.items() if not f.startswith('.github/')}
 
     # Build summary table rows
-    total_adds = sum(v['adds'] for v in filtered_files.values())
-    total_removes = sum(v['removes'] for v in filtered_files.values())
     summary_rows = []
+    total_adds = total_removes = 0
     for fname, stats in filtered_files.items():
-        total = stats['adds'] + stats['removes']
-        summary_rows.append(f"| `{fname}` | {stats['adds']} | {stats['removes']} | {total} |")
+        adds = stats['adds']
+        removes = stats['removes']
+        total = adds + removes
+        total_adds += adds
+        total_removes += removes
+        summary_rows.append(f"| `{fname}` | {adds} | {removes} | {total} |")
+
     summary_table = (
-    "| File | +Adds | -Removes | ΔTotal |
-"
-    "|:----|:-----:|:--------:|:------:|
-" +
-        "|:----|:-----:|:--------:|:------:|
-" +
-        "
-".join(summary_rows) + "
-" +
-        f"| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
+        "| File | +Adds | -Removes | ΔTotal |\n"
+        "|:-----|:-----:|:--------:|:------:|\n"
+        + "\n".join(summary_rows)
+        + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
     )
 
     # Create the detailed diff snippets
     file_sections = []
     for fname, stats in filtered_files.items():
-        # find first hunk snippet
         lines = stats['hunks']
         snippet = []
-        for i, l in enumerate(lines):
+        for idx, l in enumerate(lines):
             if l.startswith('@@'):
-                snippet = lines[i:i+6]
+                snippet = lines[idx:idx+6]
                 break
-                snippet_text = "
-".join(snippet) if snippet else "*(no snippet available)*"
-".join(snippet) if snippet else "*(no snippet available)*"
+        snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
         section = f"""
 <details>
   <summary>📄 `{fname}`</summary>
@@ -108,13 +103,7 @@ def analyze_code_changes(diff_text):
 
 2. For each file, include:
    - A small diff snippet (first hunk)
-   - Sections on Null Safety, Documentation Gaps, Code Quality, and Suggestions (fill in based on the diff)
-
-3. Conclude with a **Summary of Findings** table summarizing:
-   - ❌ Null Safety
-   - ❌ Missing Docs
-   - ❌ Code Quality
-   - 💡 Suggestions
+   - Sections on Null Safety, Documentation Gaps, Code Quality, and Suggestions
 
 Here is the full diff:
 
@@ -127,11 +116,8 @@ Here is the full diff:
 And then your **Summary of Findings** table below."""
 
     # Debug log
-    print("PROMPT:
-", prompt[:1000], "...
-")
+    print("PROMPT PREVIEW:\n", prompt[:1000], "...")
 
-    # Call the OpenAI API
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -150,21 +136,17 @@ def post_pr_comment(pr_number, comment):
         'Authorization': f'token {token}',
         'Accept': 'application/vnd.github.v3+json'
     }
-    url = f'https://api.github.com/repos/{repo}/issues/{pr_number}/comments'
-    data = {'body': comment}
-    resp = requests.post(url, headers=headers, json=data)
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    resp = requests.post(url, headers=headers, json={'body': comment})
     resp.raise_for_status()
     return resp.json()
 
 def main():
-    # Load the PR event to get the number
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
-
     diff = get_pr_diff(pr_number)
     analysis = analyze_code_changes(diff)
-
     comment = f"## 🤖 Code Review Summary\n\n{analysis}\n\n*This comment was generated automatically.*"
     post_pr_comment(pr_number, comment)
 
