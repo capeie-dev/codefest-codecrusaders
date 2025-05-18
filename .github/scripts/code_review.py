@@ -34,9 +34,9 @@ def analyze_code_changes(diff_text):
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
-            path_b = parts[2][2:]
-            current = path_b
-            files[path_b] = {'adds': 0, 'removes': 0, 'hunks': []}
+            path = parts[2][2:]
+            current = path
+            files[path] = {'adds': 0, 'removes': 0, 'hunks': []}
         elif current:
             files[current]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
@@ -51,7 +51,7 @@ def analyze_code_changes(diff_text):
             files[current]['deleted'] = True
 
     # Exclude .github paths
-    files = {p: stats for p, stats in files.items() if not p.startswith('.github/')}
+    files = {path: stats for path, stats in files.items() if not path.startswith('.github/')}
 
     # 1️⃣ Build Change Summary table
     summary_rows = []
@@ -71,7 +71,22 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total**            | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Prepare dynamic prompt (sections 2-4)
+    # Filter diff for prompt, excluding .github changes
+    filtered_diff_lines = []
+    skip = False
+    for line in diff_text.splitlines():
+        if line.startswith('diff --git'):
+            parts = line.split()
+            path_b = parts[2][2:]
+            skip = path_b.startswith('.github/')
+            if not skip:
+                filtered_diff_lines.append(line)
+        else:
+            if not skip:
+                filtered_diff_lines.append(line)
+    filtered_diff_text = "\n".join(filtered_diff_lines)
+
+    # 2️⃣-4️⃣ Build dynamic prompt sections
     prompt = (
         "### 2️⃣ PR Overview\n"
         "Analyze the diff above and describe the primary objectives of this PR, noting any file additions or deletions, and summarizing the expected impact on functionality, performance, and maintainability.\n\n"
@@ -80,7 +95,7 @@ def analyze_code_changes(diff_text):
         "### 4️⃣ Recommendations / Improvements\n"
         "Based on the diff, suggest actionable recommendations such as adding null checks, improving validation, refactoring duplicated logic, and updating documentation or tests.\n\n"
         "### Full Diff\n"
-        f"```diff\n{diff_text}\n```"
+        f"```diff\n{filtered_diff_text}\n```"
     )
 
     # Call OpenAI to generate sections 2-4
@@ -107,7 +122,7 @@ def analyze_code_changes(diff_text):
 def post_pr_comment(pr_number, comment):
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
-    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+    headers = { 'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json' }
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     res = requests.post(url, headers=headers, json={'body': comment})
     res.raise_for_status()
