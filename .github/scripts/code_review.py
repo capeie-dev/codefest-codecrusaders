@@ -61,7 +61,7 @@ def analyze_code_changes(diff_text):
         total = adds + rem
         total_adds += adds
         total_removes += rem
-        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
+        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
     change_summary = (
         "| File                 | +Adds | -Removes | ΔTotal |\n"
         "|:---------------------|:-----:|:--------:|:------:|\n"
