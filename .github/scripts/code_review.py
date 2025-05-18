@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import re
 from openai import OpenAI
 
 
@@ -21,14 +22,13 @@ def get_pr_diff(pr_number):
 def analyze_code_changes(diff_text):
     """
     Generate a structured PR summary with dynamic content:
-    1️⃣ Change Summary (table of additions/removals per file)
-    2️⃣ PR Overview (model-generated narrative based on diff)
-    3️⃣ File-level Changes (model-generated breakdown)
-    4️⃣ Recommendations/Improvements (model-generated suggestions)
+    Sections are collapsible per <details> tag:
+    1️⃣ Change Summary (table)
+    2️⃣ PR Overview
+    3️⃣ File-level Changes
+    4️⃣ Recommendations / Improvements
     """
-    import os
-
-    # Parse diff into per-file stats, skip .github folder
+    # Parse diff into per-file stats
     files = {}
     current = None
     for line in diff_text.splitlines():
@@ -44,22 +44,19 @@ def analyze_code_changes(diff_text):
             elif line.startswith('-') and not line.startswith('---'):
                 files[current]['removes'] += 1
         if line.startswith('new file mode') and current:
-            # track file additions
             files[current]['added'] = True
         if line.startswith('deleted file mode') and current:
-            # track file deletions
             files[current]['deleted'] = True
 
-    # Exclude .github paths
-    files = {path: stats for path, stats in files.items() if not path.startswith('.github/')}
+    # Exclude .github folder changes
+    files = {p: stats for p, stats in files.items() if not p.startswith('.github/')}
 
-    # 1️⃣ Build Change Summary table
+    # 1️⃣ Change Summary table
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
         name = os.path.basename(path)
-        adds = stats['adds']
-        rem = stats['removes']
+        adds, rem = stats['adds'], stats['removes']
         total = adds + rem
         total_adds += adds
         total_removes += rem
@@ -71,8 +68,8 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total**            | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Filter diff for prompt, excluding .github changes
-    filtered_diff_lines = []
+    # Filter diff for prompt (exclude .github)
+    filtered_diff = []
     skip = False
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
@@ -80,13 +77,13 @@ def analyze_code_changes(diff_text):
             path_b = parts[2][2:]
             skip = path_b.startswith('.github/')
             if not skip:
-                filtered_diff_lines.append(line)
+                filtered_diff.append(line)
         else:
             if not skip:
-                filtered_diff_lines.append(line)
-    filtered_diff_text = "\n".join(filtered_diff_lines)
+                filtered_diff.append(line)
+    filtered_diff_text = "\n".join(filtered_diff)
 
-    # 2️⃣-4️⃣ Build dynamic prompt sections
+    # Build prompt for sections 2-4
     prompt = (
         "### 2️⃣ PR Overview\n"
         "Analyze the diff above and describe the primary objectives of this PR, noting any file additions or deletions, and summarizing the expected impact on functionality, performance, and maintainability.\n\n"
@@ -98,7 +95,6 @@ def analyze_code_changes(diff_text):
         f"```diff\n{filtered_diff_text}\n```"
     )
 
-    # Call OpenAI to generate sections 2-4
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -109,20 +105,41 @@ def analyze_code_changes(diff_text):
     )
     body = response.choices[0].message.content
 
-    # Prepend header and Change Summary table
-    combined = (
-        "## 🤖 Code Review Summary\n\n"
-        "### 1️⃣ Change Summary\n"
-        f"{change_summary}\n\n"
-        + body
-    )
-    return combined
+    # Split generated sections
+    sections = {}
+    for m in re.finditer(r"### (\d️⃣ [^\n]+)\n([\s\S]*?)(?=### \d️⃣|\Z)", body):
+        sections[m.group(1)] = m.group(2).strip()
+
+    # Build collapsible output
+    output = []
+    output.append("## 🤖 Code Review Summary")
+    output.append("")
+
+    # Section 1
+    output.append("<details>")
+    output.append("<summary>1️⃣ Change Summary</summary>")
+    output.append("")
+    output.append(change_summary)
+    output.append("</details>")
+
+    # Sections 2-4
+    for sec in ["2️⃣ PR Overview", "3️⃣ File-level Changes", "4️⃣ Recommendations / Improvements"]:
+        content = sections.get(sec, None)
+        if content:
+            output.append("")
+            output.append("<details>")
+            output.append(f"<summary>{sec}</summary>")
+            output.append("")
+            output.append(content)
+            output.append("</details>")
+
+    return "\n".join(output)
 
 
 def post_pr_comment(pr_number, comment):
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
-    headers = { 'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json' }
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     res = requests.post(url, headers=headers, json={'body': comment})
     res.raise_for_status()
