@@ -19,13 +19,14 @@ def get_pr_diff(pr_number):
 
 def analyze_code_changes(diff_text):
     """
-    Build a prompt that includes:
-    1) Change Summary table
+    Build a prompt with:
+    1) Change Summary table (base filenames only)
     2) High-Level Change Categories
     3) Risk & Impact Summary
     4) Per-File detailed sections
     5) Summary of Findings table
     """
+    import os
     # Parse diff into per-file hunks and stats
     files = {}
     current_file = None
@@ -42,18 +43,20 @@ def analyze_code_changes(diff_text):
             elif line.startswith('-') and not line.startswith('---'):
                 files[current_file]['removes'] += 1
 
-    # Filter out tooling or non-code files if desired
+    # Filter out non-code files
     filtered = {f:v for f,v in files.items() if not f.startswith('.github/')}
 
-    # Build Change Summary table
+    # Build Change Summary table using base filenames
     summary_rows = []
     total_adds = total_removes = 0
-    for fname, stats in filtered.items():
-        adds, removes = stats['adds'], stats['removes']
+    for full_path, stats in filtered.items():
+        base = os.path.basename(full_path)
+        adds = stats['adds']
+        removes = stats['removes']
         total = adds + removes
         total_adds += adds
         total_removes += removes
-        summary_rows.append(f"| `{fname}` | {adds} | {removes} | {total} |")
+        summary_rows.append(f"| `{base}` | {adds} | {removes} | {total} |")
     summary_table = (
         "| File | +Adds | -Removes | ΔTotal |\n"
         "|:-----|:-----:|:--------:|:------:|\n"
@@ -61,9 +64,10 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
     )
 
-    # Construct per-file sections
+    # Construct per-file sections with diff snippet and classifications
     sections = []
-    for fname, stats in filtered.items():
+    for full_path, stats in filtered.items():
+        base = os.path.basename(full_path)
         # extract first hunk snippet
         snippet = []
         for idx, l in enumerate(stats['hunks']):
@@ -73,7 +77,7 @@ def analyze_code_changes(diff_text):
         snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
         section = f"""
 <details>
-  <summary>📄 `{fname}`</summary>
+  <summary>📄 `{base}`</summary>
 
   ```diff
 {snippet_text}
@@ -145,9 +149,8 @@ Here is the full diff:
 | ❌ Null Safety      | ...                                                         |
 | ❌ Missing Docs     | ...                                                         |
 | ❌ Code Quality     | ...                                                         |
-| 💡 Suggestions      | ...                                                         |"
+| 💡 Suggestions      | ...                                                         |"""
 
-"""
     # Debug output
     print("PROMPT PREVIEW:\n", prompt[:1000], "...")
 
