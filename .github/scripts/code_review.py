@@ -32,11 +32,12 @@ def analyze_code_changes(diff_text):
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split(); path = parts[2][2:]
-            current = path; files[path] = {'adds': 0, 'removes': 0}
+            current = path
+            files[path] = {'adds': 0, 'removes': 0}
         elif current:
             if line.startswith('+') and not line.startswith('+++'):
                 files[current]['adds'] += 1
-            if line.startswith('-') and not line.startswith('---'):
+            elif line.startswith('-') and not line.startswith('---'):
                 files[current]['removes'] += 1
         if line.startswith('new file mode') and current:
             added.add(current)
@@ -51,16 +52,17 @@ def analyze_code_changes(diff_text):
         name = os.path.basename(path)
         adds, rem = stats['adds'], stats['removes']
         total = adds + rem
-        total_adds += adds; total_removes += rem
+        total_adds += adds
+        total_removes += rem
         rows.append(f"| `{name}` | {adds:>5} | {rem:>7} | {total:>6} |")
     change_summary = (
         "| File                 | +Adds  | -Removes  | ΔTotal  |\n"
         "|:---------------------|:------:|:---------:|:-------:|\n"
         + "\n".join(rows)
-        + f"\n| **Total**            | {total_adds:>5} | {total_removes:>7} | {(total_adds+total_removes):>6} |"
+        + f"\n| **Total**            | {total_adds:>5} | {total_removes:>7} | {(total_adds + total_removes):>6} |"
     )
 
-        # Prepare LLM prompt to elaborate sections 2 & 3 based on diff
+    # Prepare the prompt
     prompt = f"""## 🤖 Code Review Summary
 
 1️⃣ Change Summary
@@ -82,6 +84,8 @@ List actionable suggestions for further improvements, such as adding null checks
 ```
 """
 
+    # Debug preview
+    print("PROMPT PREVIEW:\n", prompt[:500], "...")
     # Call OpenAI
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
@@ -91,13 +95,17 @@ List actionable suggestions for further improvements, such as adding null checks
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content[0].message.content
+    # Return the generated content string
+    return response.choices[0].message.content
 
 
 def post_pr_comment(pr_number, comment):
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
-    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+    headers = {
+        'Authorization': f'token {token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     res = requests.post(url, headers=headers, json={'body': comment})
     res.raise_for_status()
