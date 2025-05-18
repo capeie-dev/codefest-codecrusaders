@@ -23,10 +23,9 @@ def analyze_code_changes(diff_text):
     """
     Generate a structured PR summary with dynamic content:
     Sections are collapsible per <details> tag:
-    1️⃣ Change Summary (table)
-    2️⃣ PR Overview
-    3️⃣ File-level Changes
-    4️⃣ Recommendations / Improvements
+    1️⃣ Change Summary
+    2️⃣ File-level Changes
+    3️⃣ Recommendations / Improvements
     """
     # Parse diff into per-file stats
     files = {}
@@ -51,7 +50,7 @@ def analyze_code_changes(diff_text):
     # Exclude .github folder changes
     files = {p: stats for p, stats in files.items() if not p.startswith('.github/')}
 
-    # 1️⃣ Change Summary table
+    # 1️⃣ Build Change Summary table
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
@@ -83,7 +82,7 @@ def analyze_code_changes(diff_text):
                 filtered_diff.append(line)
     filtered_diff_text = "\n".join(filtered_diff)
 
-    # Build prompt for sections 2-4
+    # Build prompt for PR Overview, File-level, Recommendations
     prompt = (
         "### 2️⃣ PR Overview\n"
         "Analyze the diff above and describe the primary objectives of this PR, noting any file additions or deletions, and summarizing the expected impact on functionality, performance, and maintainability.\n\n"
@@ -105,33 +104,44 @@ def analyze_code_changes(diff_text):
     )
     body = response.choices[0].message.content
 
-    # Split generated sections
+    # Split generated sections into a dictionary
     sections = {}
     for m in re.finditer(r"### (\d️⃣ [^\n]+)\n([\s\S]*?)(?=### \d️⃣|\Z)", body):
         sections[m.group(1)] = m.group(2).strip()
 
-    # Build collapsible output
-    output = []
-    output.append("## 🤖 Code Review Summary")
-    output.append("")
+    # Build collapsible output with three sections
+    output = ["## 🤖 Code Review Summary", ""]
 
-    # Section 1
+    # 1️⃣ Change Summary (merge Overview)
     output.append("<details>")
     output.append("<summary>1️⃣ Change Summary</summary>")
     output.append("")
     output.append(change_summary)
+    overview = sections.get("2️⃣ PR Overview", "")
+    if overview:
+        output.append("")
+        output.extend(overview.splitlines())
     output.append("</details>")
 
-    # Sections 2-4
-    for sec in ["2️⃣ PR Overview", "3️⃣ File-level Changes", "4️⃣ Recommendations / Improvements"]:
-        content = sections.get(sec, None)
-        if content:
-            output.append("")
-            output.append("<details>")
-            output.append(f"<summary>{sec}</summary>")
-            output.append("")
-            output.append(content)
-            output.append("</details>")
+    # 2️⃣ File-level Changes
+    file_changes = sections.get("3️⃣ File-level Changes", "")
+    if file_changes:
+        output.append("")
+        output.append("<details>")
+        output.append("<summary>2️⃣ File-level Changes</summary>")
+        output.append("")
+        output.extend(file_changes.splitlines())
+        output.append("</details>")
+
+    # 3️⃣ Recommendations / Improvements
+    recs = sections.get("4️⃣ Recommendations / Improvements", "")
+    if recs:
+        output.append("")
+        output.append("<details>")
+        output.append("<summary>3️⃣ Recommendations / Improvements</summary>")
+        output.append("")
+        output.extend(recs.splitlines())
+        output.append("</details>")
 
     return "\n".join(output)
 
@@ -141,9 +151,9 @@ def post_pr_comment(pr_number, comment):
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-    res = requests.post(url, headers=headers, json={'body': comment})
-    res.raise_for_status()
-    return res.json()
+    resp = requests.post(url, headers=headers, json={'body': comment})
+    resp.raise_for_status()
+    return resp.json()
 
 
 def main():
