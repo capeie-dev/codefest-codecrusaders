@@ -4,151 +4,184 @@ import requests
 from openai import OpenAI
 
 def get_pr_diff(pr_number):
-    """Get the PR diff from GitHub API"""
+    """Fetch the unified diff for the given PR number."""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
         'Authorization': f'token {token}',
         'Accept': 'application/vnd.github.v3.diff'
     }
-    url = f'https://api.github.com/repos/{repo}/pulls/{pr_number}'
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     response = requests.get(url, headers=headers)
+    response.raise_for_status()
     return response.text
 
+
 def analyze_code_changes(diff_text):
-    """Analyze code changes using OpenAI API, excluding .github folder changes"""
-    # Filter out changes from .github folder
-    filtered_diff_lines = []
+    """
+    Build a prompt that includes:
+    1) Change Summary table
+    2) High-Level Change Categories
+    3) Risk & Impact Summary
+    4) Per-File detailed sections
+    5) Summary of Findings table
+    """
+    # Parse diff into per-file hunks and stats
+    files = {}
     current_file = None
-    skip_current = False
-    changed_files = set()
-    added_lines = 0
-    removed_lines = 0
-
-    
-    for line in diff_text.split('\n'):
+    for line in diff_text.splitlines():
         if line.startswith('diff --git'):
-            current_file = line.split()[2][2:]  # Get "b/filename"
-            skip_current = current_file.startswith('.github/')
-            if not skip_current:
-                file_name_only = os.path.basename(current_file)
-                changed_files.add(file_name_only)
-        elif not skip_current:
+            parts = line.split()
+            path_b = parts[2][2:]
+            current_file = path_b
+            files[current_file] = {'hunks': [], 'adds': 0, 'removes': 0}
+        elif current_file:
+            files[current_file]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
-                added_lines += 1
+                files[current_file]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
-                removed_lines += 1
-            filtered_diff_lines.append(line)
-    
-    filtered_diff = '\n'.join(filtered_diff_lines)
-    
-    # If there are no changes after filtering, return a message
-    if not filtered_diff.strip():
-        return "No changes found outside of the .github folder."
-    
-    # Determine number of points based on changes
-    num_points = min(max(2, len(changed_files) + (added_lines + removed_lines) // 10), 8)
-    
-    client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-    
-    prompt = f"""As an AI pull request reviewer bot, your task is to provide a concise summary of the changes introduced in the following pull request diff. Focus on the key modifications, additions, and deletions in the code.
+                files[current_file]['removes'] += 1
 
-Present the summary clearly and neutrally, highlighting the main purpose and impact of the changes. Avoid providing detailed code reviews, suggestions, or opinions in this initial summary.
+    # Filter out tooling or non-code files if desired
+    filtered = {f:v for f,v in files.items() if not f.startswith('.github/')}
 
-The summary should be easy for a human reviewer to quickly understand the scope of the PR.
+    # Build Change Summary table
+    summary_rows = []
+    total_adds = total_removes = 0
+    for fname, stats in filtered.items():
+        adds, removes = stats['adds'], stats['removes']
+        total = adds + removes
+        total_adds += adds
+        total_removes += removes
+        summary_rows.append(f"| `{fname}` | {adds} | {removes} | {total} |")
+    summary_table = (
+        "| File | +Adds | -Removes | ΔTotal |\n"
+        "|:-----|:-----:|:--------:|:------:|\n"
+        + "\n".join(summary_rows)
+        + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
+    )
+
+    # Construct per-file sections
+    sections = []
+    for fname, stats in filtered.items():
+        # extract first hunk snippet
+        snippet = []
+        for idx, l in enumerate(stats['hunks']):
+            if l.startswith('@@'):
+                snippet = stats['hunks'][idx:idx+6]
+                break
+        snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
+        section = f"""
+<details>
+  <summary>📄 `{fname}`</summary>
+
+  ```diff
+{snippet_text}
+  ```
+
+  **Change Classification**
+  - 🆕 Additions: ...
+  - 🗑️ Deletions: ...
+  - ✏️ Modifications: ...
+  - 🔄 Renames: ...
+
+  **❌ Null Safety & Validation**
+  - ...
+
+  **❌ Documentation & Comments**
+  - ...
+
+  **❌ Code Quality & Patterns**
+  - ...
+
+  **✅ Test & Coverage Notes**
+  - ...
+
+  **💡 Suggestions**
+  - ...
+</details>"""
+        sections.append(section)
+
+    # Build final LLM prompt
+    prompt = f"""As an AI pull request reviewer bot, your tasks:
+
+1) **Change Summary**: Provide a markdown table of file changes:
+
+{summary_table}
+
+2) **High-Level Change Categories**: Based on the diff below, list:
+   - 🆕 New files
+   - 🗑️ Removed files
+   - 🔧 Refactorings (method renames, class extractions)
+   - 🐞 Bug fixes (null checks added, off-by-one fixes)
+   - 📝 Docs & comments (Javadoc or README updates)
+   - 🔒 Security (input validation, guard clauses)
+
+3) **Risk & Impact Summary**:
+   - ⚠️ Risk areas (potential breaking changes)
+   - ✅ Covered by tests
+
+4) **Per-File Details**: For each file, include:
+   - Tiny diff snippet (first hunk)
+   - Change Classification
+   - Null Safety & Validation
+   - Documentation & Comments
+   - Code Quality & Patterns
+   - Test & Coverage Notes
+   - 💡 Suggestions
+
+Here is the full diff:
 
 ```diff
 {diff_text}
 ```
 
-### Summary of Changes
-1. **Removal or addition of scripts/files**: Describe specific files deleted or added with their paths.
-2. **Workflow modifications**: Mention exact sections or steps changed in workflow YML files.
-3. **Changes in <FileName>.java**: Under this heading, list exact code changes, such as method renames (e.g., `getAllHotels()` renamed to `fetchAllHotels()`), logging statement updates (e.g., changed `log.info` to `log.debug`), Javadoc modifications (e.g., removed `@return` tags in `getHotelList()`), added or removed parameters in methods, and any validation logic inserted or removed.
-4. **Changes in <FileName>.java**: Similarly, for each Java file, specify the precise code differences: updated method signatures, validation checks added/removed, logging message formats changed, Javadoc edits, and any structural refactorings.
+{"".join(sections)}
 
-After this summary, include per-file sections:
+5) **Summary of Findings**: Conclude with a table:
 
-<details>
-  <summary>📄 &lt;FileName&gt;</summary>
+| Category            | Observation                                                 |
+|:--------------------|:------------------------------------------------------------|
+| ❌ Null Safety      | ...                                                         |
+| ❌ Missing Docs     | ...                                                         |
+| ❌ Code Quality     | ...                                                         |
+| 💡 Suggestions      | ...                                                         |"
 
-  <br>
+"""
+    # Debug output
+    print("PROMPT PREVIEW:\n", prompt[:1000], "...")
 
-  **❌ Null Safety Issues**
-  - Identify any NPE risks based on removed or absent null checks.
-
-  **❌ Documentation Gaps**
-  - Highlight Javadoc changes, such as missing `@param` or `@return`.
-
-  **❌ Code Quality Observations**
-  - Note duplicate logic, naming issues, or pattern misuse.
-
-  **💡 Suggestions for Improvement**
-  - Recommend adding null checks, improving naming, or adjusting logging levels.
-
-</details>
-
-Repeat for each file.
-
-<details>
-  <summary>🧾 Summary of Findings</summary>
-
-  **✅ Files Reviewed**: {', '.join(sorted(changed_files)) or "None"}  
-  **❌ Null Issues**: Summarize NPE risks across files  
-  **❌ Missing Docs**: Summarize Javadoc removals or edits  
-  **❌ Code Quality**: Summarize major quality concerns  
-  **💡 Suggestions**: Overall improvement advice
-
-</details>
-
-Keep it professional and precise."""
-    # ✅ DEBUG: Show prompt preview in GitHub Actions logs
-    print("PROMPT PREVIEW START\n" + prompt[:1000] + "\nPROMPT PREVIEW END")
-    
+    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a code review assistant. Provide concise, technical analysis of code changes."},
+            {"role": "system", "content": "You are a precise, concise PR summarizer."},
             {"role": "user", "content": prompt}
         ]
     )
-    
     return response.choices[0].message.content
 
+
 def post_pr_comment(pr_number, comment):
-    """Post a comment on the PR"""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
         'Authorization': f'token {token}',
         'Accept': 'application/vnd.github.v3+json'
     }
-    url = f'https://api.github.com/repos/{repo}/issues/{pr_number}/comments'
-    data = {'body': comment}
-    response = requests.post(url, headers=headers, json=data)
-    return response.json()
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    resp = requests.post(url, headers=headers, json={'body': comment})
+    resp.raise_for_status()
+    return resp.json()
+
 
 def main():
-    # Get PR number from GitHub event
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
-
-    # Get PR diff
     diff = get_pr_diff(pr_number)
-    
-    # Analyze changes
     analysis = analyze_code_changes(diff)
-    
-    # Format comment
-    comment = f"""## 🤖 Code Review Bot Analysis
-
-{analysis}
-
----
-*This is an automated code review summary generated by AI.*"""
-    
-    # Post comment
+    comment = f"## 🤖 Code Review Summary\n\n{analysis}\n\n*This comment was generated automatically.*"
     post_pr_comment(pr_number, comment)
 
 if __name__ == "__main__":
