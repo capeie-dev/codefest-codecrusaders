@@ -20,136 +20,127 @@ def get_pr_diff(pr_number):
 def analyze_code_changes(diff_text):
     """
     Build a prompt with:
-    1) Change Summary table (base filenames only)
-    2) High-Level Change Categories
-    3) Risk & Impact Summary
-    4) Per-File detailed sections
-    5) Summary of Findings table
+      1) Change Summary table (base filenames only)
+      2) High-Level Change Categories
+      3) Risk & Impact Summary
+      4) Per-File detailed sections
+      5) Summary of Findings table
     """
     import os
+
     # Parse diff into per-file hunks and stats
     files = {}
-    current_file = None
+    current = None
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
             path_b = parts[2][2:]
-            current_file = path_b
-            files[current_file] = {'hunks': [], 'adds': 0, 'removes': 0}
-        elif current_file:
-            files[current_file]['hunks'].append(line)
+            current = path_b
+            files[current] = {'hunks': [], 'adds': 0, 'removes': 0}
+        elif current:
+            files[current]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
-                files[current_file]['adds'] += 1
+                files[current]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
-                files[current_file]['removes'] += 1
+                files[current]['removes'] += 1
 
-    # Filter out non-code files
-    filtered = {f:v for f,v in files.items() if not f.startswith('.github/')}
+    # Filter out non-code or tooling files
+    filtered = {f: stats for f, stats in files.items() if not f.startswith('.github/')}
 
-    # Build Change Summary table using base filenames
+    # Build Change Summary table
     summary_rows = []
     total_adds = total_removes = 0
-    for full_path, stats in filtered.items():
-        base = os.path.basename(full_path)
-        adds = stats['adds']
-        removes = stats['removes']
+    for path, stats in filtered.items():
+        base = os.path.basename(path)
+        adds, removes = stats['adds'], stats['removes']
         total = adds + removes
         total_adds += adds
         total_removes += removes
-        summary_rows.append(f"| `{base}` | {adds} | {removes} | {total} |")
+        summary_rows.append(f"| `{base}` | {adds:>3} | {removes:>3} | {total:>3} |")
+
     summary_table = (
-        "| File | +Adds | -Removes | ΔTotal |\n"
-        "|:-----|:-----:|:--------:|:------:|\n"
+        "| File                      | +Adds | -Removes | ΔTotal |\n"
+        "|:--------------------------|:-----:|:--------:|:------:|\n"
         + "\n".join(summary_rows)
-        + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
+        + f"\n| **Total**{' ' * 17}| {total_adds:>3} | {total_removes:>3} | {(total_adds+total_removes):>3} |"
     )
 
-    # Construct per-file sections with diff snippet and classifications
+    # High-Level Change Categories (placeholders)
+    categories = (
+        "- **🗑️ Removed files**: ...\n"
+        "- **🔄 Refactorings**: ...\n"
+        "- **🐞 Bug fixes**: ...\n"
+        "- **📝 Docs**: ...\n"
+        "- **🔒 Security**: ..."
+    )
+
+    # Risk & Impact Summary
+    risk_table = (
+        "| ⚠️ Risk areas       | ... potential breaking changes          |\n"
+        "| ✅ Test coverage    | ... no direct tests                     |"
+    )
+
+    # Per-File Details sections
     sections = []
-    for full_path, stats in filtered.items():
-        base = os.path.basename(full_path)
+    for path, stats in filtered.items():
+        base = os.path.basename(path)
         # extract first hunk snippet
         snippet = []
-        for idx, l in enumerate(stats['hunks']):
+        for i, l in enumerate(stats['hunks']):
             if l.startswith('@@'):
-                snippet = stats['hunks'][idx:idx+6]
+                snippet = stats['hunks'][i:i+5]
                 break
         snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
+
         section = f"""
 <details>
-  <summary>📄 `{base}`</summary>
+<summary>📄 `{base}`</summary>
 
-  ```diff
+```diff
 {snippet_text}
-  ```
+```
 
-  **Change Classification**
-  - 🆕 Additions: ...
-  - 🗑️ Deletions: ...
-  - ✏️ Modifications: ...
-  - 🔄 Renames: ...
+- **🆕 Additions**: ...
+- **🗑️ Deletions**: ...
+- **✏️ Modifications**: ...
+- **🔄 Renames**: ...
 
-  **❌ Null Safety & Validation**
-  - ...
-
-  **❌ Documentation & Comments**
-  - ...
-
-  **❌ Code Quality & Patterns**
-  - ...
-
-  **✅ Test & Coverage Notes**
-  - ...
-
-  **💡 Suggestions**
-  - ...
+- **❌ Null Safety**: ...
+- **❌ Docs**: ...
+- **❌ Code Quality**: ...
+- **✅ Tests**: ...
+- **💡 Suggestions**: ...
 </details>"""
         sections.append(section)
 
-    # Build final LLM prompt
-    prompt = f"""As an AI pull request reviewer bot, your tasks:
+    # Summary of Findings table
+    findings_table = (
+        "| Category         | Observation                               |\n"
+        "|:-----------------|:------------------------------------------|\n"
+        "| ❌ Null Safety   | ...                                       |\n"
+        "| ❌ Missing Docs  | ...                                       |\n"
+        "| ❌ Code Quality  | ...                                       |\n"
+        "| 💡 Suggestions   | ...                                       |"
+    )
 
-1) **Change Summary**: Provide a markdown table of file changes:
+    # Compile final prompt
+    prompt = f"""## 🤖 Code Review Summary
 
+### 1️⃣ Change Summary
 {summary_table}
 
-2) **High-Level Change Categories**: Based on the diff below, list:
-   - 🆕 New files
-   - 🗑️ Removed files
-   - 🔧 Refactorings (method renames, class extractions)
-   - 🐞 Bug fixes (null checks added, off-by-one fixes)
-   - 📝 Docs & comments (Javadoc or README updates)
-   - 🔒 Security (input validation, guard clauses)
+### 2️⃣ High-Level Change Categories
+{categories}
 
-3) **Risk & Impact Summary**:
-   - ⚠️ Risk areas (potential breaking changes)
-   - ✅ Covered by tests
+### 3️⃣ Risk & Impact Summary
+{risk_table}
 
-4) **Per-File Details**: For each file, include:
-   - Tiny diff snippet (first hunk)
-   - Change Classification
-   - Null Safety & Validation
-   - Documentation & Comments
-   - Code Quality & Patterns
-   - Test & Coverage Notes
-   - 💡 Suggestions
+### 4️⃣ Per-File Details
+{''.join(sections)}
 
-Here is the full diff:
-
-```diff
-{diff_text}
-```
-
-{"".join(sections)}
-
-5) **Summary of Findings**: Conclude with a table:
-
-| Category            | Observation                                                 |
-|:--------------------|:------------------------------------------------------------|
-| ❌ Null Safety      | ...                                                         |
-| ❌ Missing Docs     | ...                                                         |
-| ❌ Code Quality     | ...                                                         |
-| 💡 Suggestions      | ...                                                         |"""
+### 5️⃣ Summary of Findings
+{findings_table}
+"""
 
     # Debug output
     print("PROMPT PREVIEW:\n", prompt[:1000], "...")
@@ -184,8 +175,7 @@ def main():
     pr_number = event['pull_request']['number']
     diff = get_pr_diff(pr_number)
     analysis = analyze_code_changes(diff)
-    comment = f"## 🤖 Code Review Summary\n\n{analysis}\n\n*This comment was generated automatically.*"
-    post_pr_comment(pr_number, comment)
+    post_pr_comment(pr_number, analysis)
 
 if __name__ == "__main__":
     main()
