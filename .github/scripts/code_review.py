@@ -20,9 +20,9 @@ def get_pr_diff(pr_number):
 
 def analyze_code_changes(diff_text):
     """
-    Generate the PR summary with sections:
+    Generate the PR summary with dynamic sections:
     1️⃣ Change Summary (table)
-    2️⃣ PR Overview (dynamic narrative)
+    2️⃣ PR Overview (dynamic narrative based on diff)
     3️⃣ File-level Changes (dynamic per-file breakdown)
     4️⃣ Recommendations/Improvements
     """
@@ -33,9 +33,10 @@ def analyze_code_changes(diff_text):
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
-            path = parts[2][2:]
-            current = path
-            files[path] = {'adds': 0, 'removes': 0, 'hunks': []}
+            # path_b is after a/ and b/
+            path_b = parts[2][2:]
+            current = path_b
+            files[current] = {'adds': 0, 'removes': 0, 'hunks': []}
         elif current:
             files[current]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
@@ -47,7 +48,7 @@ def analyze_code_changes(diff_text):
         if line.startswith('deleted file mode') and current:
             deleted.add(current)
 
-    # 1️⃣ Change Summary table
+    # 1️⃣ Build Change Summary table
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
@@ -67,21 +68,18 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total**            | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Build dynamic prompt lines
-    prompt_lines = [
-        "## 🤖 Code Review Summary",
-        "",
-        # Note: Change Summary is prepended later, so omit from prompt_lines
-        "### 2️⃣ PR Overview",
-        "Analyze the diff above and provide a concise summary of the PR’s objectives, including any added, deleted, or modified files, and the overall impact on functionality, performance, and maintainability.",
-        "",
-        "### 3️⃣ File-level Changes",
-        "For each file listed in the Change Summary, detail the main modifications, additions, and deletions in bullet points. Include short code snippets from the diff to illustrate key changes.",
-        "",
-        "### 4️⃣ Recommendations / Improvements",
-        "Based on the diff, suggest actionable improvements such as adding missing null checks, enhancing validation, refactoring repeated logic, and updating documentation or tests.",
-    ]
-    prompt = "\n".join(prompt_lines)
+    # 2️⃣ Prepare dynamic prompt for the remaining sections
+    prompt = (
+        "## 🤖 Code Review Summary\n\n"
+        "### 2️⃣ PR Overview\n"
+        "Analyze the diff above and provide a concise summary of the PR’s objectives, including any added, deleted, or modified files, and the overall impact on functionality, performance, and maintainability.\n\n"
+        "### 3️⃣ File-level Changes\n"
+        "For each file listed in the Change Summary, detail the main modifications, additions, and deletions in bullet points. Include short code snippets from the diff to illustrate key changes.\n\n"
+        "### 4️⃣ Recommendations / Improvements\n"
+        "Based on the diff, suggest actionable improvements such as adding missing null checks, enhancing validation, refactoring repeated logic, and updating documentation or tests.\n\n"
+        "### Full Diff\n"
+        f"```diff\n{diff_text}\n```"
+    )
 
     # Call OpenAI API
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
@@ -92,14 +90,15 @@ def analyze_code_changes(diff_text):
             {"role": "user", "content": prompt}
         ]
     )
-    LLM_output = response.choices[0].message.content
+    llm_output = response.choices[0].message.content
 
-    # Prepend Change Summary table to LLM output
-    # Use triple-quoted string for the table
-    combined = f"""### 1️⃣ Change Summary
-{change_summary}
-
-""" + LLM_output
+    # Prepend header and Change Summary table
+    combined = (
+        "## 🤖 Code Review Summary\n\n"
+        "### 1️⃣ Change Summary\n"
+        f"{change_summary}\n\n"
+        + llm_output
+    )
     return combined
 
 
@@ -111,17 +110,22 @@ def post_pr_comment(pr_number, comment):
         'Accept': 'application/vnd.github.v3+json'
     }
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-    resp = requests.post(url, headers=headers, json={'body': comment})
-    resp.raise_for_status()
-    return resp.json()
+    response = requests.post(url, headers=headers, json={'body': comment})
+    response.raise_for_status()
+    return response.json()
 
 
 def main():
+    # Load event data and get PR number
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
+
+    # Get diff and analyze
     diff_text = get_pr_diff(pr_number)
     summary = analyze_code_changes(diff_text)
+
+    # Post comment
     post_pr_comment(pr_number, summary)
 
 if __name__ == "__main__":
