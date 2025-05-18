@@ -4,7 +4,7 @@ import requests
 from openai import OpenAI
 
 def get_pr_diff(pr_number):
-    """Fetch the unified diff for the given PR number."""
+    """Fetch the unified diff for the pull request."""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
@@ -12,23 +12,25 @@ def get_pr_diff(pr_number):
         'Accept': 'application/vnd.github.v3.diff'
     }
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.text
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.text
 
 
 def analyze_code_changes(diff_text):
     """
-    Build a prompt with:
-    1) Change Summary table (base filenames only)
-    2) High-Level Change Categories
-    3) Risk & Impact Summary
-    4) Per-File detailed sections
-    5) Summary of Findings table
+    Generate a review summary with:
+    1) Change Summary table
+    2) High-Level PR overview (including file additions/deletions)
+    3) Per-file change summaries
+    4) Recommendations/Improvements
     """
     import os
-    # Parse diff into per-file hunks and stats
+
+    # Parse diff into file stats
     files = {}
+    added_files = []
+    deleted_files = []
     current_file = None
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
@@ -42,125 +44,82 @@ def analyze_code_changes(diff_text):
                 files[current_file]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
                 files[current_file]['removes'] += 1
+        if line.startswith('new file mode') and current_file:
+            added_files.append(current_file)
+        if line.startswith('deleted file mode') and current_file:
+            deleted_files.append(current_file)
 
-    # Filter out non-code files
-    filtered = {f:v for f,v in files.items() if not f.startswith('.github/')}
-
-    # Build Change Summary table using base filenames
+    # Filter and compute summary rows
     summary_rows = []
     total_adds = total_removes = 0
-    for full_path, stats in filtered.items():
+    for full_path, stats in files.items():
+        if full_path.startswith('.github/'):  # skip tooling
+            continue
         base = os.path.basename(full_path)
-        adds = stats['adds']
-        removes = stats['removes']
+        adds = stats['adds']; removes = stats['removes']
         total = adds + removes
-        total_adds += adds
-        total_removes += removes
-        summary_rows.append(f"| `{base}` | {adds} | {removes} | {total} |")
+        total_adds += adds; total_removes += removes
+        summary_rows.append(f"| `{base}` | {adds:>4} | {removes:>4} | {total:>5} |")
+
     summary_table = (
         "| File | +Adds | -Removes | ΔTotal |\n"
         "|:-----|:-----:|:--------:|:------:|\n"
         + "\n".join(summary_rows)
-        + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
+        + f"\n| **Total** | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Construct per-file sections with diff snippet and classifications
-    sections = []
-    for full_path, stats in filtered.items():
+    # High-Level PR overview
+    overview = []
+    if added_files:
+        names = ', '.join(os.path.basename(f) for f in added_files)
+        overview.append(f"🆕 Added files: {names}")
+    if deleted_files:
+        names = ', '.join(os.path.basename(f) for f in deleted_files)
+        overview.append(f"🗑️ Deleted files: {names}")
+    overview.append("🔧 Modified files: " + ', '.join(os.path.basename(f) for f in files if f not in added_files + deleted_files))
+
+    # Per-file summaries
+    file_summaries = []
+    for full_path, stats in files.items():
+        if full_path.startswith('.github/'): continue
         base = os.path.basename(full_path)
-        # extract first hunk snippet
-        snippet = []
-        for idx, l in enumerate(stats['hunks']):
-            if l.startswith('@@'):
-                snippet = stats['hunks'][idx:idx+6]
-                break
-        snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
-        section = f"""
-<details>
-  <summary>📄 `{base}`</summary>
+        # summarize changes
+        adds = stats['adds']; removes = stats['removes']
+        summary = f"`{base}`: +{adds} / -{removes}."
+        file_summaries.append(f"- {summary}")
 
-  ```diff
-{snippet_text}
-  ```
+    # Recommendations/Improvements placeholder
+    recommendations = [
+        "• Add null checks where service calls may return null.",
+        "• Reinstate or enhance validation logic removed in refactor.",
+        "• Update Javadoc comments for all public endpoints.",
+        "• Consolidate duplicate logic into utility methods.",
+        "• Add or update unit tests to cover modified logic."
+    ]
 
-  **Change Classification**
-  - 🆕 Additions: ...
-  - 🗑️ Deletions: ...
-  - ✏️ Modifications: ...
-  - 🔄 Renames: ...
+    # Build prompt
+    prompt = f"""## 🤖 Code Review Summary
 
-  **❌ Null Safety & Validation**
-  - ...
-
-  **❌ Documentation & Comments**
-  - ...
-
-  **❌ Code Quality & Patterns**
-  - ...
-
-  **✅ Test & Coverage Notes**
-  - ...
-
-  **💡 Suggestions**
-  - ...
-</details>"""
-        sections.append(section)
-
-    # Build final LLM prompt
-    prompt = f"""As an AI pull request reviewer bot, your tasks:
-
-1) **Change Summary**: Provide a markdown table of file changes:
-
+**1️⃣ Change Summary**
 {summary_table}
 
-2) **High-Level Change Categories**: Based on the diff below, list:
-   - 🆕 New files
-   - 🗑️ Removed files
-   - 🔧 Refactorings (method renames, class extractions)
-   - 🐞 Bug fixes (null checks added, off-by-one fixes)
-   - 📝 Docs & comments (Javadoc or README updates)
-   - 🔒 Security (input validation, guard clauses)
+**2️⃣ PR Overview**
+" + "\n".join(overview) + "\n
+" +
+"**3️⃣ File-level Changes**
+" + "\n".join(file_summaries) + "\n
+" +
+"**4️⃣ Recommendations / Improvements**
+" + "\n".join(recommendations) + """ 
 
-3) **Risk & Impact Summary**:
-   - ⚠️ Risk areas (potential breaking changes)
-   - ✅ Covered by tests
-
-4) **Per-File Details**: For each file, include:
-   - Tiny diff snippet (first hunk)
-   - Change Classification
-   - Null Safety & Validation
-   - Documentation & Comments
-   - Code Quality & Patterns
-   - Test & Coverage Notes
-   - 💡 Suggestions
-
-Here is the full diff:
-
-```diff
-{diff_text}
-```
-
-{"".join(sections)}
-
-5) **Summary of Findings**: Conclude with a table:
-
-| Category            | Observation                                                 |
-|:--------------------|:------------------------------------------------------------|
-| ❌ Null Safety      | ...                                                         |
-| ❌ Missing Docs     | ...                                                         |
-| ❌ Code Quality     | ...                                                         |
-| 💡 Suggestions      | ...                                                         |"""
-
-    # Debug output
-    print("PROMPT PREVIEW:\n", prompt[:1000], "...")
+    # Debug print
+    print("PROMPT PREVIEW:\n", prompt)
 
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
         model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a precise, concise PR summarizer."},
-            {"role": "user", "content": prompt}
-        ]
+        messages=[{"role": "system", "content": "You are a concise PR review bot."},
+                  {"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content
 
@@ -168,10 +127,7 @@ Here is the full diff:
 def post_pr_comment(pr_number, comment):
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
-    headers = {
-        'Authorization': f'token {token}',
-        'Accept': 'application/vnd.github.v3+json'
-    }
+    headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     resp = requests.post(url, headers=headers, json={'body': comment})
     resp.raise_for_status()
@@ -183,8 +139,7 @@ def main():
         event = json.load(f)
     pr_number = event['pull_request']['number']
     diff = get_pr_diff(pr_number)
-    analysis = analyze_code_changes(diff)
-    comment = f"## 🤖 Code Review Summary\n\n{analysis}\n\n*This comment was generated automatically.*"
+    comment = analyze_code_changes(diff)
     post_pr_comment(pr_number, comment)
 
 if __name__ == "__main__":
