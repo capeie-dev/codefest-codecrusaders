@@ -12,9 +12,9 @@ def get_pr_diff(pr_number):
         'Accept': 'application/vnd.github.v3.diff'
     }
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    resp = requests.get(url, headers=headers)
-    resp.raise_for_status()
-    return resp.text
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.text
 
 
 def analyze_code_changes(diff_text):
@@ -29,7 +29,7 @@ def analyze_code_changes(diff_text):
     files = {}
     added, deleted = set(), set()
     current = None
-        for line in diff_text.splitlines():
+    for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
             path = parts[2][2:]
@@ -51,13 +51,15 @@ def analyze_code_changes(diff_text):
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
-        if path.startswith('.github/'): continue
+        if path.startswith('.github/'): 
+            continue
         name = os.path.basename(path)
-        adds, rem = stats['adds'], stats['removes']
-        total = adds + rem
+        adds = stats['adds']
+        removes = stats['removes']
+        total = adds + removes
         total_adds += adds
-        total_removes += rem
-        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
+        total_removes += removes
+        summary_rows.append(f"| `{name}` | {adds:>4} | {removes:>4} | {total:>5} |")
 
     change_summary = (
         "| File                 | +Adds | -Removes | ΔTotal |\n"
@@ -88,18 +90,20 @@ def analyze_code_changes(diff_text):
     # 3️⃣ File-level Changes
     file_changes = []
     for path, stats in files.items():
-        if path.startswith('.github/'): continue
+        if path.startswith('.github/'): 
+            continue
         name = os.path.basename(path)
-        adds, rem = stats['adds'], stats['removes']
-        # first hunk snippet
-        hunk_lines = []
+        adds = stats['adds']
+        removes = stats['removes']
+        # extract first diff hunk snippet
+        snippet = []
         for i, l in enumerate(stats['hunks']):
             if l.startswith('@@'):
-                hunk_lines = stats['hunks'][i:i+5]
+                snippet = stats['hunks'][i:i+5]
                 break
-        snippet = "\n".join(hunk_lines) if hunk_lines else ""
+        snippet_text = "\n".join(snippet) if snippet else ""
         file_changes.append(
-            f"- **{name}** (+{adds}/-{rem}): key changes below.\n```diff\n{snippet}\n```"
+            f"- **{name}** (+{adds}/-{removes}): key changes below.\n```diff\n{snippet_text}\n```"
         )
 
     # 4️⃣ Recommendations / Improvements
