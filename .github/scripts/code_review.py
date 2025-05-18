@@ -4,7 +4,7 @@ import requests
 from openai import OpenAI
 
 def get_pr_diff(pr_number):
-    """Fetch the unified diff for the given PR number."""
+    """Fetch the unified diff for the pull request."""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
@@ -12,83 +12,82 @@ def get_pr_diff(pr_number):
         'Accept': 'application/vnd.github.v3.diff'
     }
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    return response.text
+    resp = requests.get(url, headers=headers)
+    resp.raise_for_status()
+    return resp.text
 
 
 def analyze_code_changes(diff_text):
     """
-    Build a prompt with:
+    Build and return a formatted summary comment including:
       1) Change Summary table (base filenames only)
       2) High-Level Change Categories
-      3) Risk & Impact Summary
-      4) Per-File detailed sections
+      3) Risk & Impact Summary table
+      4) Per-file details with diff snippets
       5) Summary of Findings table
     """
-    import os
-
-    # Parse diff into per-file hunks and stats
+    # Parse diff into per-file statistics
     files = {}
-    current = None
+    current_file = None
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
             path_b = parts[2][2:]
-            current = path_b
-            files[current] = {'hunks': [], 'adds': 0, 'removes': 0}
-        elif current:
-            files[current]['hunks'].append(line)
+            current_file = path_b
+            files[current_file] = {'hunks': [], 'adds': 0, 'removes': 0}
+        elif current_file:
+            files[current_file]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
-                files[current]['adds'] += 1
+                files[current_file]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
-                files[current]['removes'] += 1
+                files[current_file]['removes'] += 1
 
-    # Filter out non-code or tooling files
+    # Filter out tooling or GitHub workflow files
     filtered = {f: stats for f, stats in files.items() if not f.startswith('.github/')}
 
-    # Build Change Summary table
+    # Build Change Summary table with base filenames
     summary_rows = []
     total_adds = total_removes = 0
-    for path, stats in filtered.items():
-        base = os.path.basename(path)
-        adds, removes = stats['adds'], stats['removes']
+    for full_path, stats in filtered.items():
+        base = os.path.basename(full_path)
+        adds = stats['adds']
+        removes = stats['removes']
         total = adds + removes
         total_adds += adds
         total_removes += removes
-        summary_rows.append(f"| `{base}` | {adds:>3} | {removes:>3} | {total:>3} |")
+        summary_rows.append(f"| `{base}`{' ' * (26 - len(base))}| {adds:>4} | {removes:>7} | {total:>6} |")
 
     summary_table = (
-        "| File                      | +Adds | -Removes | ΔTotal |\n"
-        "|:--------------------------|:-----:|:--------:|:------:|\n"
+        "| File                      | +Adds | -Removes | ΔTotal  |\n"
+        "|:--------------------------|:-----:|:--------:|:-------:|\n"
         + "\n".join(summary_rows)
-        + f"\n| **Total**{' ' * 17}| {total_adds:>3} | {total_removes:>3} | {(total_adds+total_removes):>3} |"
+        + f"\n| **Total**{' ' * 17}| {total_adds:>4} | {total_removes:>7} | {(total_adds+total_removes):>6} |"
     )
 
-    # High-Level Change Categories (placeholders)
+    # High-Level Change Categories (placeholders to fill)
     categories = (
-        "- **🗑️ Removed files**: ...\n"
-        "- **🔄 Refactorings**: ...\n"
-        "- **🐞 Bug fixes**: ...\n"
-        "- **📝 Docs**: ...\n"
-        "- **🔒 Security**: ..."
+        "- **🗑️ Removed files**: file deletion notices\n"
+        "- **🔄 Refactorings**: method renames or logic cleanup\n"
+        "- **🐞 Bug fixes**: null checks added, logic corrections\n"
+        "- **📝 Docs**: Javadoc or comment updates\n"
+        "- **🔒 Security**: validation or permission enhancements"
     )
 
-    # Risk & Impact Summary
+    # Risk & Impact Summary table
     risk_table = (
-        "| ⚠️ Risk areas       | ... potential breaking changes          |\n"
-        "| ✅ Test coverage    | ... no direct tests                     |"
+        "| ⚠️ Risk Areas          | Potential breaking changes               |\n"
+        "| ✅ Test Coverage       | Covered by existing tests? (yes/no)      |"
     )
 
-    # Per-File Details sections
-    sections = []
-    for path, stats in filtered.items():
-        base = os.path.basename(path)
-        # extract first hunk snippet
+    # Per-file detailed sections
+    file_sections = []
+    for full_path, stats in filtered.items():
+        base = os.path.basename(full_path)
+        # Extract first diff hunk snippet
         snippet = []
-        for i, l in enumerate(stats['hunks']):
+        for idx, l in enumerate(stats['hunks']):
             if l.startswith('@@'):
-                snippet = stats['hunks'][i:i+5]
+                snippet = stats['hunks'][idx:idx+5]
                 break
         snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
 
@@ -100,30 +99,30 @@ def analyze_code_changes(diff_text):
 {snippet_text}
 ```
 
-- **🆕 Additions**: ...
-- **🗑️ Deletions**: ...
-- **✏️ Modifications**: ...
-- **🔄 Renames**: ...
+- **🆕 Additions**: describe new code added
+- **🗑️ Deletions**: describe code removed
+- **✏️ Modifications**: describe changes made
+- **🔄 Renames**: describe renamed elements
 
-- **❌ Null Safety**: ...
-- **❌ Docs**: ...
-- **❌ Code Quality**: ...
-- **✅ Tests**: ...
-- **💡 Suggestions**: ...
+- **❌ Null Safety**: note potential NPE risks or guards
+- **❌ Docs**: note missing or incomplete comments
+- **❌ Code Quality**: note duplication or poor patterns
+- **✅ Tests**: note test coverage or missing tests
+- **💡 Suggestions**: recommended improvements
 </details>"""
-        sections.append(section)
+        file_sections.append(section)
 
     # Summary of Findings table
     findings_table = (
-        "| Category         | Observation                               |\n"
-        "|:-----------------|:------------------------------------------|\n"
-        "| ❌ Null Safety   | ...                                       |\n"
-        "| ❌ Missing Docs  | ...                                       |\n"
-        "| ❌ Code Quality  | ...                                       |\n"
-        "| 💡 Suggestions   | ...                                       |"
+        "| Category            | Observation                                  |\n"
+        "|:--------------------|:---------------------------------------------|\n"
+        "| ❌ Null Safety      | missing null checks or potential NPEs         |\n"
+        "| ❌ Missing Docs     | removed or incomplete Javadoc comments        |\n"
+        "| ❌ Code Quality     | duplication, naming issues, or removed logic  |\n"
+        "| 💡 Suggestions      | summary recommendations                      |"
     )
 
-    # Compile final prompt
+    # Compile full prompt
     prompt = f"""## 🤖 Code Review Summary
 
 ### 1️⃣ Change Summary
@@ -136,13 +135,13 @@ def analyze_code_changes(diff_text):
 {risk_table}
 
 ### 4️⃣ Per-File Details
-{''.join(sections)}
+{''.join(file_sections)}
 
 ### 5️⃣ Summary of Findings
 {findings_table}
 """
 
-    # Debug output
+    # Debug: print prompt preview
     print("PROMPT PREVIEW:\n", prompt[:1000], "...")
 
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
@@ -173,9 +172,9 @@ def main():
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
-    diff = get_pr_diff(pr_number)
-    analysis = analyze_code_changes(diff)
-    post_pr_comment(pr_number, analysis)
+    diff_text = get_pr_diff(pr_number)
+    comment = analyze_code_changes(diff_text)
+    post_pr_comment(pr_number, comment)
 
 if __name__ == "__main__":
     main()
