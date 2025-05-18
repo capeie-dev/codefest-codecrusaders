@@ -4,7 +4,7 @@ import requests
 from openai import OpenAI
 
 def get_pr_diff(pr_number):
-    """Fetch the unified diff for the given pull request."""
+    """Fetch the unified diff for the pull request."""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
@@ -19,41 +19,48 @@ def get_pr_diff(pr_number):
 
 def analyze_code_changes(diff_text):
     """
-    Generate a structured PR summary:
-    1️⃣ Change Summary table
-    2️⃣ Detailed PR Overview
-    3️⃣ File-level Change Summaries
-    4️⃣ Recommendations / Improvements
+    Generate a review summary with:
+    1) Change Summary table
+    2) High-Level PR overview (including file additions/deletions)
+    3) Per-file change summaries
+    4) Recommendations/Improvements
     """
     import os
 
-    # Parse diff into per-file stats
-    files, added, deleted = {}, set(), set()
-    current = None
+    # Parse diff into file stats
+    files = {}
+    added_files = []
+    deleted_files = []
+    current_file = None
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
-            parts = line.split(); path = parts[2][2:]
-            current = path; files[path] = {'hunks': [], 'adds': 0, 'removes': 0}
-        elif current:
-            files[current]['hunks'].append(line)
+            parts = line.split()
+            path_b = parts[2][2:]
+            current_file = path_b
+            files[current_file] = {'hunks': [], 'adds': 0, 'removes': 0}
+        elif current_file:
+            files[current_file]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
-                files[current]['adds'] += 1
-            if line.startswith('-') and not line.startswith('---'):
-                files[current]['removes'] += 1
-        if line.startswith('new file mode') and current:
-            added.add(current)
-        if line.startswith('deleted file mode') and current:
-            deleted.add(current)
+                files[current_file]['adds'] += 1
+            elif line.startswith('-') and not line.startswith('---'):
+                files[current_file]['removes'] += 1
+        if line.startswith('new file mode') and current_file:
+            added_files.append(current_file)
+        if line.startswith('deleted file mode') and current_file:
+            deleted_files.append(current_file)
 
-    # 1️⃣ Change Summary table (base names)
-    summary_rows, total_adds, total_removes = [], 0, 0
-    for path, stats in files.items():
-        if path.startswith('.github/'): continue
-        name = os.path.basename(path)
-        adds, rem = stats['adds'], stats['removes']
-        total = adds + rem
-        total_adds += adds; total_removes += rem
-        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
+    # Filter and compute summary rows
+    summary_rows = []
+    total_adds = total_removes = 0
+    for full_path, stats in files.items():
+        if full_path.startswith('.github/'):  # skip tooling
+            continue
+        base = os.path.basename(full_path)
+        adds = stats['adds']; removes = stats['removes']
+        total = adds + removes
+        total_adds += adds; total_removes += removes
+        summary_rows.append(f"| `{base}` | {adds:>4} | {removes:>4} | {total:>5} |")
+
     summary_table = (
         "| File | +Adds | -Removes | ΔTotal |\n"
         "|:-----|:-----:|:--------:|:------:|\n"
@@ -61,61 +68,60 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total** | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # 2️⃣ Detailed PR Overview
-    overview_lines = []
-    if added:
-        overview_lines.append(f"🆕 Added: {', '.join(os.path.basename(p) for p in sorted(added))}")
-    if deleted:
-        overview_lines.append(f"🗑️ Deleted: {', '.join(os.path.basename(p) for p in sorted(deleted))}")
-    modified = [p for p in files if p not in added and p not in deleted and not p.startswith('.github/')]
-    if modified:
-        overview_lines.append(f"🔧 Modified: {', '.join(os.path.basename(p) for p in sorted(modified))}")
-    overview_lines.append(f"This PR simplifies controller logic, improves maintainability, and removes redundant code.")
+    # High-Level PR overview
+    overview = []
+    if added_files:
+        names = ', '.join(os.path.basename(f) for f in added_files)
+        overview.append(f"🆕 Added files: {names}")
+    if deleted_files:
+        names = ', '.join(os.path.basename(f) for f in deleted_files)
+        overview.append(f"🗑️ Deleted files: {names}")
+    overview.append("🔧 Modified files: " + ', '.join(os.path.basename(f) for f in files if f not in added_files + deleted_files))
 
-    # 3️⃣ File-level Change Summaries
+    # Per-file summaries
     file_summaries = []
-    for path, stats in files.items():
-        if path.startswith('.github/'): continue
-        name = os.path.basename(path)
-        adds, rem = stats['adds'], stats['removes']
-        # extract first hunk for context
-        hunk = next((stats['hunks'][i:i+5] for i,l in enumerate(stats['hunks']) if l.startswith('@@')), [])
-        snippet = '\n'.join(hunk) if hunk else ''
-        file_summaries.append(
-            f"- **{name}** (+{adds}/-{rem}): Summary of key changes.\n```diff\n{snippet}\n```"
-        )
+    for full_path, stats in files.items():
+        if full_path.startswith('.github/'): continue
+        base = os.path.basename(full_path)
+        # summarize changes
+        adds = stats['adds']; removes = stats['removes']
+        summary = f"`{base}`: +{adds} / -{removes}."
+        file_summaries.append(f"- {summary}")
 
-    # 4️⃣ Recommendations / Improvements
-    recs = [
-        "• Add null checks around service calls.",
-        "• Reinstate input validations where removed.",
-        "• Update Javadoc for public endpoints.",
-        "• Consolidate duplicate logic into helper methods.",
-        "• Enhance or add unit tests for changed code paths."
+    # Recommendations/Improvements placeholder
+    recommendations = [
+        "• Add null checks where service calls may return null.",
+        "• Reinstate or enhance validation logic removed in refactor.",
+        "• Update Javadoc comments for all public endpoints.",
+        "• Consolidate duplicate logic into utility methods.",
+        "• Add or update unit tests to cover modified logic."
     ]
 
-    # Assemble full comment
-    comment = (
-        "## 🤖 Code Review Summary\n\n"
-        "### 1️⃣ Change Summary\n" + summary_table + "\n\n"
-        "### 2️⃣ PR Overview\n" + "\n".join(overview_lines) + "\n\n"
-        "### 3️⃣ File-level Changes\n" + "\n".join(file_summaries) + "\n\n"
-        "### 4️⃣ Recommendations / Improvements\n" + "\n".join(recs)
-    )
+    # Build prompt
+    prompt = f"""## 🤖 Code Review Summary
 
-    # Debug logging
-    print("PROMPT PREVIEW:\n", comment[:1000], "...)\n")
+**1️⃣ Change Summary**
+{summary_table}
 
-    # Call OpenAI
+**2️⃣ PR Overview**
+" + "\n".join(overview) + "\n
+" +
+"**3️⃣ File-level Changes**
+" + "\n".join(file_summaries) + "\n
+" +
+"**4️⃣ Recommendations / Improvements**
+" + "\n".join(recommendations) + """ 
+
+    # Debug print
+    print("PROMPT PREVIEW:\n", prompt)
+
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-    resp = client.chat.completions.create(
+    response = client.chat.completions.create(
         model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a concise, structured PR reviewer."},
-            {"role": "user", "content": comment}
-        ]
+        messages=[{"role": "system", "content": "You are a concise PR review bot."},
+                  {"role": "user", "content": prompt}]
     )
-    return resp.choices[0].message.content
+    return response.choices[0].message.content
 
 
 def post_pr_comment(pr_number, comment):
@@ -123,9 +129,9 @@ def post_pr_comment(pr_number, comment):
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-    res = requests.post(url, headers=headers, json={'body': comment})
-    res.raise_for_status()
-    return res.json()
+    resp = requests.post(url, headers=headers, json={'body': comment})
+    resp.raise_for_status()
+    return resp.json()
 
 
 def main():
@@ -133,8 +139,8 @@ def main():
         event = json.load(f)
     pr_number = event['pull_request']['number']
     diff = get_pr_diff(pr_number)
-    summary = analyze_code_changes(diff)
-    post_pr_comment(pr_number, summary)
+    comment = analyze_code_changes(diff)
+    post_pr_comment(pr_number, comment)
 
 if __name__ == "__main__":
     main()
