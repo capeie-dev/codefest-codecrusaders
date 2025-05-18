@@ -51,7 +51,7 @@ def analyze_code_changes(diff_text):
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
-        if path.startswith('.github/'): 
+        if path.startswith('.github/'):
             continue
         name = os.path.basename(path)
         adds = stats['adds']
@@ -67,22 +67,20 @@ def analyze_code_changes(diff_text):
         + f"\n| **Total**            | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Prepare dynamic prompt lines
+    # Build dynamic prompt lines
     prompt_lines = [
-    "## 🤖 Code Review Summary",
-    "",
-    "### 1️⃣ Change Summary",
-    change_summary,
-    "",
-    "### 2️⃣ PR Overview",
-    "Analyze the diff above and provide a concise summary of the PR’s objectives, including any added, deleted, or modified files, and the overall impact on functionality, performance, and maintainability.",
-    "",
-    "### 3️⃣ File-level Changes",
-    "For each file listed in the Change Summary, detail the main modifications, additions, and deletions in bullet points. Include short code snippets from the diff to illustrate key changes.",
-    "",
-    "### 4️⃣ Recommendations / Improvements",
-    "Based on the diff, suggest actionable improvements such as adding missing null checks, enhancing validation, refactoring repeated logic, and updating documentation or tests.",
-]
+        "## 🤖 Code Review Summary",
+        "",
+        # Note: Change Summary is prepended later, so omit from prompt_lines
+        "### 2️⃣ PR Overview",
+        "Analyze the diff above and provide a concise summary of the PR’s objectives, including any added, deleted, or modified files, and the overall impact on functionality, performance, and maintainability.",
+        "",
+        "### 3️⃣ File-level Changes",
+        "For each file listed in the Change Summary, detail the main modifications, additions, and deletions in bullet points. Include short code snippets from the diff to illustrate key changes.",
+        "",
+        "### 4️⃣ Recommendations / Improvements",
+        "Based on the diff, suggest actionable improvements such as adding missing null checks, enhancing validation, refactoring repeated logic, and updating documentation or tests.",
+    ]
     prompt = "\n".join(prompt_lines)
 
     # Call OpenAI API
@@ -95,17 +93,23 @@ def analyze_code_changes(diff_text):
         ]
     )
     LLM_output = response.choices[0].message.content
+
     # Prepend Change Summary table to LLM output
-    return f"### 1️⃣ Change Summary
+    # Use triple-quoted string for the table
+    combined = f"""### 1️⃣ Change Summary
 {change_summary}
 
-" + LLM_output
+""" + LLM_output
+    return combined
 
 
 def post_pr_comment(pr_number, comment):
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
-    headers = { 'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json' }
+    headers = {
+        'Authorization': f'token {token}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     resp = requests.post(url, headers=headers, json={'body': comment})
     resp.raise_for_status()
