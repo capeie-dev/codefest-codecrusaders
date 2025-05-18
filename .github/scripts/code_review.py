@@ -4,7 +4,7 @@ import requests
 from openai import OpenAI
 
 def get_pr_diff(pr_number):
-    """Fetch the unified diff for the pull request."""
+    """Fetch the unified diff for the given PR number."""
     token = os.environ['GITHUB_TOKEN']
     repo = os.environ['GITHUB_REPOSITORY']
     headers = {
@@ -12,21 +12,22 @@ def get_pr_diff(pr_number):
         'Accept': 'application/vnd.github.v3.diff'
     }
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
-    resp = requests.get(url, headers=headers)
-    resp.raise_for_status()
-    return resp.text
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.text
 
 
 def analyze_code_changes(diff_text):
     """
-    Build and return a formatted summary comment including:
-      1) Change Summary table (base filenames only)
-      2) High-Level Change Categories
-      3) Risk & Impact Summary table
-      4) Per-file details with diff snippets
-      5) Summary of Findings table
+    Build a prompt with:
+    1) Change Summary table (base filenames only)
+    2) High-Level Change Categories
+    3) Risk & Impact Summary
+    4) Per-File detailed sections
+    5) Summary of Findings table
     """
-    # Parse diff into per-file statistics
+    import os
+    # Parse diff into per-file hunks and stats
     files = {}
     current_file = None
     for line in diff_text.splitlines():
@@ -42,10 +43,10 @@ def analyze_code_changes(diff_text):
             elif line.startswith('-') and not line.startswith('---'):
                 files[current_file]['removes'] += 1
 
-    # Filter out tooling or GitHub workflow files
-    filtered = {f: stats for f, stats in files.items() if not f.startswith('.github/')}
+    # Filter out non-code files
+    filtered = {f:v for f,v in files.items() if not f.startswith('.github/')}
 
-    # Build Change Summary table with base filenames
+    # Build Change Summary table using base filenames
     summary_rows = []
     total_adds = total_removes = 0
     for full_path, stats in filtered.items():
@@ -55,93 +56,102 @@ def analyze_code_changes(diff_text):
         total = adds + removes
         total_adds += adds
         total_removes += removes
-        summary_rows.append(f"| `{base}`{' ' * (26 - len(base))}| {adds:>4} | {removes:>7} | {total:>6} |")
-
+        summary_rows.append(f"| `{base}` | {adds} | {removes} | {total} |")
     summary_table = (
-        "| File                      | +Adds | -Removes | ΔTotal  |\n"
-        "|:--------------------------|:-----:|:--------:|:-------:|\n"
+        "| File | +Adds | -Removes | ΔTotal |\n"
+        "|:-----|:-----:|:--------:|:------:|\n"
         + "\n".join(summary_rows)
-        + f"\n| **Total**{' ' * 17}| {total_adds:>4} | {total_removes:>7} | {(total_adds+total_removes):>6} |"
+        + f"\n| **Total** | {total_adds} | {total_removes} | {total_adds + total_removes} |"
     )
 
-    # High-Level Change Categories (placeholders to fill)
-    categories = (
-        "- **🗑️ Removed files**: file deletion notices\n"
-        "- **🔄 Refactorings**: method renames or logic cleanup\n"
-        "- **🐞 Bug fixes**: null checks added, logic corrections\n"
-        "- **📝 Docs**: Javadoc or comment updates\n"
-        "- **🔒 Security**: validation or permission enhancements"
-    )
-
-    # Risk & Impact Summary table
-    risk_table = (
-        "| ⚠️ Risk Areas          | Potential breaking changes               |\n"
-        "| ✅ Test Coverage       | Covered by existing tests? (yes/no)      |"
-    )
-
-    # Per-file detailed sections
-    file_sections = []
+    # Construct per-file sections with diff snippet and classifications
+    sections = []
     for full_path, stats in filtered.items():
         base = os.path.basename(full_path)
-        # Extract first diff hunk snippet
+        # extract first hunk snippet
         snippet = []
         for idx, l in enumerate(stats['hunks']):
             if l.startswith('@@'):
-                snippet = stats['hunks'][idx:idx+5]
+                snippet = stats['hunks'][idx:idx+6]
                 break
         snippet_text = "\n".join(snippet) if snippet else "*(no snippet available)*"
-
         section = f"""
 <details>
-<summary>📄 `{base}`</summary>
+  <summary>📄 `{base}`</summary>
 
-```diff
+  ```diff
 {snippet_text}
-```
+  ```
 
-- **🆕 Additions**: describe new code added
-- **🗑️ Deletions**: describe code removed
-- **✏️ Modifications**: describe changes made
-- **🔄 Renames**: describe renamed elements
+  **Change Classification**
+  - 🆕 Additions: ...
+  - 🗑️ Deletions: ...
+  - ✏️ Modifications: ...
+  - 🔄 Renames: ...
 
-- **❌ Null Safety**: note potential NPE risks or guards
-- **❌ Docs**: note missing or incomplete comments
-- **❌ Code Quality**: note duplication or poor patterns
-- **✅ Tests**: note test coverage or missing tests
-- **💡 Suggestions**: recommended improvements
+  **❌ Null Safety & Validation**
+  - ...
+
+  **❌ Documentation & Comments**
+  - ...
+
+  **❌ Code Quality & Patterns**
+  - ...
+
+  **✅ Test & Coverage Notes**
+  - ...
+
+  **💡 Suggestions**
+  - ...
 </details>"""
-        file_sections.append(section)
+        sections.append(section)
 
-    # Summary of Findings table
-    findings_table = (
-        "| Category            | Observation                                  |\n"
-        "|:--------------------|:---------------------------------------------|\n"
-        "| ❌ Null Safety      | missing null checks or potential NPEs         |\n"
-        "| ❌ Missing Docs     | removed or incomplete Javadoc comments        |\n"
-        "| ❌ Code Quality     | duplication, naming issues, or removed logic  |\n"
-        "| 💡 Suggestions      | summary recommendations                      |"
-    )
+    # Build final LLM prompt
+    prompt = f"""As an AI pull request reviewer bot, your tasks:
 
-    # Compile full prompt
-    prompt = f"""## 🤖 Code Review Summary
+1) **Change Summary**: Provide a markdown table of file changes:
 
-### 1️⃣ Change Summary
 {summary_table}
 
-### 2️⃣ High-Level Change Categories
-{categories}
+2) **High-Level Change Categories**: Based on the diff below, list:
+   - 🆕 New files
+   - 🗑️ Removed files
+   - 🔧 Refactorings (method renames, class extractions)
+   - 🐞 Bug fixes (null checks added, off-by-one fixes)
+   - 📝 Docs & comments (Javadoc or README updates)
+   - 🔒 Security (input validation, guard clauses)
 
-### 3️⃣ Risk & Impact Summary
-{risk_table}
+3) **Risk & Impact Summary**:
+   - ⚠️ Risk areas (potential breaking changes)
+   - ✅ Covered by tests
 
-### 4️⃣ Per-File Details
-{''.join(file_sections)}
+4) **Per-File Details**: For each file, include:
+   - Tiny diff snippet (first hunk)
+   - Change Classification
+   - Null Safety & Validation
+   - Documentation & Comments
+   - Code Quality & Patterns
+   - Test & Coverage Notes
+   - 💡 Suggestions
 
-### 5️⃣ Summary of Findings
-{findings_table}
-"""
+Here is the full diff:
 
-    # Debug: print prompt preview
+```diff
+{diff_text}
+```
+
+{"".join(sections)}
+
+5) **Summary of Findings**: Conclude with a table:
+
+| Category            | Observation                                                 |
+|:--------------------|:------------------------------------------------------------|
+| ❌ Null Safety      | ...                                                         |
+| ❌ Missing Docs     | ...                                                         |
+| ❌ Code Quality     | ...                                                         |
+| 💡 Suggestions      | ...                                                         |"""
+
+    # Debug output
     print("PROMPT PREVIEW:\n", prompt[:1000], "...")
 
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
@@ -172,8 +182,9 @@ def main():
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
-    diff_text = get_pr_diff(pr_number)
-    comment = analyze_code_changes(diff_text)
+    diff = get_pr_diff(pr_number)
+    analysis = analyze_code_changes(diff)
+    comment = f"## 🤖 Code Review Summary\n\n{analysis}\n\n*This comment was generated automatically.*"
     post_pr_comment(pr_number, comment)
 
 if __name__ == "__main__":
