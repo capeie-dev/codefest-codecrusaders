@@ -29,13 +29,15 @@ def analyze_code_changes(diff_text):
     files = {}
     added, deleted = set(), set()
     current = None
-    for line in diff_text.splitlines():
+        for line in diff_text.splitlines():
         if line.startswith('diff --git'):
             parts = line.split()
             path = parts[2][2:]
             current = path
-            files[path] = {'adds': 0, 'removes': 0}
+            files[path] = {'hunks': [], 'adds': 0, 'removes': 0}
         elif current:
+            # collect hunk lines for diff snippets
+            files[current]['hunks'].append(line)
             if line.startswith('+') and not line.startswith('+++'):
                 files[current]['adds'] += 1
             elif line.startswith('-') and not line.startswith('---'):
