@@ -25,13 +25,14 @@ def analyze_code_changes(diff_text):
     3️⃣ File-level Changes (detailed summaries)
     4️⃣ Recommendations / Improvements
     """
-    import os
     # Parse diff to compute additions/removals per file
-    files, added, deleted = {}, set(), set()
+    files = {}
+    added, deleted = set(), set()
     current = None
     for line in diff_text.splitlines():
         if line.startswith('diff --git'):
-            parts = line.split(); path = parts[2][2:]
+            parts = line.split()
+            path = parts[2][2:]
             current = path
             files[path] = {'adds': 0, 'removes': 0}
         elif current:
@@ -44,8 +45,8 @@ def analyze_code_changes(diff_text):
         if line.startswith('deleted file mode') and current:
             deleted.add(current)
 
-    # Build Change Summary table
-    rows = []
+    # 1️⃣ Change Summary table
+    summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
         if path.startswith('.github/'): continue
@@ -54,48 +55,81 @@ def analyze_code_changes(diff_text):
         total = adds + rem
         total_adds += adds
         total_removes += rem
-        rows.append(f"| `{name}` | {adds:>5} | {rem:>7} | {total:>6} |")
+        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
+
     change_summary = (
-        "| File                 | +Adds  | -Removes  | ΔTotal  |\n"
-        "|:---------------------|:------:|:---------:|:-------:|\n"
-        + "\n".join(rows)
-        + f"\n| **Total**            | {total_adds:>5} | {total_removes:>7} | {(total_adds + total_removes):>6} |"
+        "| File                 | +Adds | -Removes | ΔTotal |\n"
+        "|:---------------------|:-----:|:--------:|:------:|\n"
+        + "\n".join(summary_rows)
+        + f"\n| **Total**            | {total_adds:>4} | {total_removes:>4} | {(total_adds+total_removes):>5} |"
     )
 
-    # Prepare the prompt
-    prompt = f"""## 🤖 Code Review Summary
+    # 2️⃣ PR Overview
+    overview = []
+    if added:
+        overview.append(
+            f"🆕 Added: {', '.join(os.path.basename(p) for p in sorted(added))}"
+        )
+    if deleted:
+        overview.append(
+            f"🗑️ Deleted: {', '.join(os.path.basename(p) for p in sorted(deleted))}"
+        )
+    modified = [p for p in files if p not in added and p not in deleted and not p.startswith('.github/')]
+    if modified:
+        overview.append(
+            f"🔧 Modified: {', '.join(os.path.basename(p) for p in sorted(modified))}"
+        )
+    overview.append(
+        "This PR simplifies controller logic, improves maintainability, and reduces redundant operations."
+    )
 
-1️⃣ Change Summary
-{change_summary}
+    # 3️⃣ File-level Changes
+    file_changes = []
+    for path, stats in files.items():
+        if path.startswith('.github/'): continue
+        name = os.path.basename(path)
+        adds, rem = stats['adds'], stats['removes']
+        # first hunk snippet
+        hunk_lines = []
+        for i, l in enumerate(stats['hunks']):
+            if l.startswith('@@'):
+                hunk_lines = stats['hunks'][i:i+5]
+                break
+        snippet = "\n".join(hunk_lines) if hunk_lines else ""
+        file_changes.append(
+            f"- **{name}** (+{adds}/-{rem}): key changes below.\n```diff\n{snippet}\n```"
+        )
 
-2️⃣ PR Overview
-Provide a detailed summary of the overall purpose and impact of these changes across all modified files. Explain why these changes were made and how they improve code quality, readability, and maintainability.
+    # 4️⃣ Recommendations / Improvements
+    recommendations = [
+        "• Add null checks for potential null returns.",
+        "• Restore or enhance validation where removed.",
+        "• Update Javadoc for all modified endpoints.",
+        "• Consolidate duplicated logic into helper methods.",
+        "• Add or update unit tests for refactored code paths."
+    ]
 
-3️⃣ File-level Changes
-For each file in the Change Summary, describe the specific modifications, additions, and deletions. Include concrete examples (e.g., method renames, Javadoc edits, null-safety fixes, validation logic changes).
-
-4️⃣ Recommendations / Improvements
-List actionable suggestions for further improvements, such as adding null checks, enhancing tests, consolidating duplicated logic, and updating documentation.
-
----
-### Full Diff
-```diff
-{diff_text}
-```
-"""
+    # Assemble comment
+    comment = (
+        "## 🤖 Code Review Summary\n\n"
+        "### 1️⃣ Change Summary\n" + change_summary + "\n\n"
+        "### 2️⃣ PR Overview\n" + "\n".join(overview) + "\n\n"
+        "### 3️⃣ File-level Changes\n" + "\n".join(file_changes) + "\n\n"
+        "### 4️⃣ Recommendations / Improvements\n" + "\n".join(recommendations)
+    )
 
     # Debug preview
-    print("PROMPT PREVIEW:\n", prompt[:500], "...")
-    # Call OpenAI
+    print("PROMPT PREVIEW:\n", comment[:500], "...")
+
+    # Call OpenAI API
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a detailed, structured pull request reviewer."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": "You are a detailed, structured PR reviewer."},
+            {"role": "user", "content": comment}
         ]
     )
-    # Return the generated content string
     return response.choices[0].message.content
 
 
@@ -116,8 +150,8 @@ def main():
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
     pr_number = event['pull_request']['number']
-    diff = get_pr_diff(pr_number)
-    summary = analyze_code_changes(diff)
+    diff_text = get_pr_diff(pr_number)
+    summary = analyze_code_changes(diff_text)
     post_pr_comment(pr_number, summary)
 
 if __name__ == "__main__":
