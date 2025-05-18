@@ -94,7 +94,12 @@ def analyze_code_changes(diff_text):
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content
+    LLM_output = response.choices[0].message.content
+    # Prepend Change Summary table to LLM output
+    return f"### 1️⃣ Change Summary
+{change_summary}
+
+" + LLM_output
 
 
 def post_pr_comment(pr_number, comment):
