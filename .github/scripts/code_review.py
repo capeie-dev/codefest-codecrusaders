@@ -52,7 +52,8 @@ def analyze_code_changes(diff_text):
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
-        if path.startswith('.github/'):
+        # Skip any paths in the .github folder
+        if path.startswith('.github/') or '/.github/' in path:
             continue
         name = os.path.basename(path)
         adds = stats['adds']
@@ -60,7 +61,7 @@ def analyze_code_changes(diff_text):
         total = adds + rem
         total_adds += adds
         total_removes += rem
-        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
+        summary_rows.append(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")(f"| `{name}` | {adds:>4} | {rem:>4} | {total:>5} |")
     change_summary = (
         "| File                 | +Adds | -Removes | ΔTotal |\n"
         "|:---------------------|:-----:|:--------:|:------:|\n"
