@@ -52,8 +52,7 @@ def analyze_code_changes(diff_text):
     summary_rows = []
     total_adds = total_removes = 0
     for path, stats in files.items():
-        # Skip any paths in the .github folder
-        if path.startswith('.github/') or '/.github/' in path:
+        if path.startswith('.github/'):
             continue
         name = os.path.basename(path)
         adds = stats['adds']
